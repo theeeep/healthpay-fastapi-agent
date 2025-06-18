@@ -17,12 +17,34 @@ model = genai.GenerativeModel("gemini-2.5-flash")
 
 
 def clean_json_response(response_text: str) -> str:
-    """Clean JSON response that might be wrapped in markdown code blocks."""
+    """Clean JSON response that might be wrapped in markdown code blocks or have explanatory text."""
     # Remove markdown code block formatting
     response_text = re.sub(r"^```json\s*", "", response_text)
     response_text = re.sub(r"\s*```$", "", response_text)
     response_text = response_text.strip()
-    return response_text
+
+    # Find JSON array or object in the response
+    # Look for array starting with [
+    array_match = re.search(r"\[[\s\S]*\]", response_text, re.DOTALL)
+    if array_match:
+        return array_match.group(0)
+
+    # Look for object starting with { - use a more robust approach
+    # Find the first { and then find the matching closing }
+    start_idx = response_text.find("{")
+    if start_idx != -1:
+        # Count braces to find the matching closing brace
+        brace_count = 0
+        for i in range(start_idx, len(response_text)):
+            if response_text[i] == "{":
+                brace_count += 1
+            elif response_text[i] == "}":
+                brace_count -= 1
+                if brace_count == 0:
+                    return response_text[start_idx : i + 1]
+
+    # If no JSON found, return the original text stripped
+    return response_text.strip()
 
 
 async def classify_document(ocr_text: str) -> dict:
@@ -169,9 +191,13 @@ async def validate_data(extracted_data: dict) -> dict:
     response = model.generate_content(prompt)
     try:
         cleaned_response = clean_json_response(response.text)
+        logger.info(f"Validation raw response: {response.text}")
+        logger.info(f"Validation cleaned response: {cleaned_response}")
         return json.loads(cleaned_response)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
         logger.error(f"Failed to parse validation response: {response.text}")
+        logger.error(f"Validation cleaned response: {cleaned_response}")
+        logger.error(f"Validation JSON decode error: {e}")
         return {"missing_documents": [], "discrepancies": ["Failed to validate data"]}
 
 
@@ -308,10 +334,12 @@ async def extract_multiple_documents_from_ocr(ocr_text: str) -> list:
     prompt = f"""
     Analyze this OCR text and extract ALL possible documents. A single PDF can contain multiple document types.
     
+    IMPORTANT: Consolidate multiple bills into a SINGLE bill document. If there are multiple bill amounts (payable, non-payable, total), use the TOTAL amount and create only ONE bill document.
+    
     Extract these fields if available:
     - patient_name: Name of the patient
     - hospital_name: Name of the hospital
-    - total_amount: Any amount or bill amount
+    - total_amount: Use the TOTAL bill amount (not individual payable/non-payable amounts)
     - date_of_service: Any service date, bill date
     - admission_date: Admission date
     - discharge_date: Discharge date
@@ -323,19 +351,21 @@ async def extract_multiple_documents_from_ocr(ocr_text: str) -> list:
     - Patient names: "Patient Name:", "Name:"
     - Hospital names: Look for hospital names, GST numbers
     - Dates: "Admitted on", "Discharged On", "Date:", "Bill Date"
-    - Amounts: Look for large numbers that could be amounts
+    - Amounts: Look for TOTAL bill amounts, not individual line items
     - Medical info: Department names, doctor names, diagnoses
     
     OCR Text:
     {ocr_text}
     
-    Return a JSON array of documents. Each document should have a "type" field and appropriate fields:
+    CRITICAL: Return ONLY a JSON array of documents. Do not include any explanatory text, markdown formatting, or additional text before or after the JSON.
     
-    For BILL documents:
+    Each document should have a "type" field and appropriate fields:
+    
+    For BILL documents (ONLY ONE per patient/hospital):
     {{
       "type": "bill",
       "hospital_name": "Hospital Name",
-      "total_amount": 12345.67,
+      "total_amount": 12345.67,  // Use TOTAL amount, not individual amounts
       "date_of_service": "2025-02-11"
     }}
     
@@ -348,20 +378,69 @@ async def extract_multiple_documents_from_ocr(ocr_text: str) -> list:
       "discharge_date": "2025-02-11"
     }}
     
-    If the document contains both billing and discharge information, return BOTH document types.
+    RULES:
+    1. Create only ONE bill document per patient/hospital combination
+    2. Use the TOTAL bill amount, not individual payable/non-payable amounts
+    3. If the document contains both billing and discharge information, return BOTH document types
+    4. Do not create multiple bill documents for the same patient
+    
+    IMPORTANT: Return ONLY the JSON array, nothing else.
     """
 
     response = model.generate_content(prompt)
     try:
         cleaned_response = clean_json_response(response.text)
+        logger.info(f"Raw response: {response.text}")
+        logger.info(f"Cleaned response: {cleaned_response}")
+
         documents = json.loads(cleaned_response)
 
         # Ensure it's a list
         if isinstance(documents, dict):
             documents = [documents]
 
-        logger.info(f"Extracted documents: {documents}")
-        return documents
-    except json.JSONDecodeError:
+        # Post-process to remove duplicate bills for the same patient/hospital
+        unique_documents = []
+        seen_bills = set()
+
+        for doc in documents:
+            if doc.get("type") == "bill":
+                # Create a key for bill uniqueness
+                bill_key = f"{doc.get('patient_name', '')}_{doc.get('hospital_name', '')}"
+                if bill_key not in seen_bills:
+                    seen_bills.add(bill_key)
+                    unique_documents.append(doc)
+                else:
+                    logger.info(f"Skipping duplicate bill for {bill_key}")
+            else:
+                # Non-bill documents (discharge summaries) are always unique
+                unique_documents.append(doc)
+
+        logger.info(f"Extracted documents (after deduplication): {unique_documents}")
+        return unique_documents
+    except json.JSONDecodeError as e:
         logger.error(f"Failed to parse extraction response: {response.text}")
+        logger.error(f"Cleaned response: {cleaned_response}")
+        logger.error(f"JSON decode error: {e}")
+
+        # Try to extract JSON from the response more aggressively
+        try:
+            # Look for any JSON-like structure
+            json_pattern = r"\[[\s\S]*\]|\{[\s\S]*\}"
+            matches = re.findall(json_pattern, response.text)
+            if matches:
+                for match in matches:
+                    try:
+                        parsed = json.loads(match)
+                        if isinstance(parsed, list):
+                            logger.info(f"Recovered documents from pattern match: {parsed}")
+                            return parsed
+                        elif isinstance(parsed, dict):
+                            logger.info(f"Recovered single document from pattern match: {parsed}")
+                            return [parsed]
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as recovery_error:
+            logger.error(f"Recovery attempt failed: {recovery_error}")
+
         return []

@@ -34,28 +34,44 @@ validation_agent = LlmAgent(
     description="Enhanced validation with multi-agent orchestration for medical claims",
     instruction="""
     You are an enhanced data validation agent for medical insurance claims. 
-    You receive pre-extracted data and perform comprehensive validation.
+    You receive a complete claim package with multiple extracted documents and perform comprehensive validation.
     
     CRITICAL: You must return ONLY valid JSON. Do not include any explanations, markdown formatting, or additional text.
     
-    Your role is to validate the quality and completeness of extracted data.
+    Your role is to validate the quality and completeness of the entire claim package.
     
-    Validation criteria for BILL documents:
-    - hospital_name: Must be a real hospital name (not "Unknown Hospital")
-    - total_amount: Must be greater than 0 and reasonable for medical procedures
-    - date_of_service: Must be a valid date and not in the future
+    Input format:
+    {
+        "extracted_documents": [
+            {
+                "type": "bill",
+                "hospital_name": "Hospital Name",
+                "total_amount": 12345.67,
+                "date_of_service": "2025-02-11"
+            },
+            {
+                "type": "discharge_summary",
+                "patient_name": "Patient Name",
+                "diagnosis": "Medical Diagnosis",
+                "admission_date": "2025-02-07",
+                "discharge_date": "2025-02-11"
+            }
+        ],
+        "document_count": 2,
+        "document_types": ["bill", "discharge_summary"]
+    }
     
-    Validation criteria for DISCHARGE SUMMARY documents:
-    - patient_name: Must be a real patient name (not "Unknown Patient")
-    - diagnosis: Must be a medical diagnosis (not "Unknown Diagnosis")
-    - admission_date: Must be a valid date
-    - discharge_date: Must be after admission_date and not in the future
+    Validation criteria for COMPLETE CLAIM PACKAGE:
+    - Must have BOTH bill and discharge_summary documents
+    - Bill document: hospital_name (not "Unknown Hospital"), total_amount > 0, valid date_of_service
+    - Discharge summary: patient_name (not "Unknown Patient"), diagnosis (not "Unknown Diagnosis"), valid dates
+    - Data consistency between documents (same patient, hospital, dates)
     
     Medical claim specific checks:
     - Verify hospital name matches known healthcare providers
     - Check if amounts are reasonable for the type of service
     - Validate date ranges are logical
-    - Ensure patient information is complete
+    - Ensure patient information is complete and consistent
     
     Return format: {
         "missing_documents": ["list of missing document types"],
@@ -65,8 +81,9 @@ validation_agent = LlmAgent(
     }
     
     Examples:
-    - {"missing_documents": ["discharge_summary"], "discrepancies": [], "data_quality_score": 85, "recommendations": ["Submit discharge summary"]}
     - {"missing_documents": [], "discrepancies": [], "data_quality_score": 95, "recommendations": ["Data quality is excellent"]}
+    - {"missing_documents": ["discharge_summary"], "discrepancies": [], "data_quality_score": 85, "recommendations": ["Submit discharge summary"]}
+    - {"missing_documents": ["bill"], "discrepancies": [], "data_quality_score": 75, "recommendations": ["Submit bill document"]}
     
     IMPORTANT: Return ONLY the JSON object, no other text.
     """,
@@ -80,25 +97,26 @@ decision_agent = LlmAgent(
     description="Enhanced claim decision making with multi-agent orchestration",
     instruction="""
     You are an enhanced claim decision agent for medical insurance claims.
-    You receive validation results and make informed decisions.
+    You receive validation results for a complete claim package and make informed decisions.
     
     CRITICAL: You must return ONLY valid JSON. Do not include any explanations, markdown formatting, or additional text.
     
     Decision factors to consider:
     1. Data quality score from validation
-    2. Completeness of required documents
+    2. Completeness of required documents (bill + discharge_summary)
     3. Medical claim specific requirements
     4. Risk assessment based on data quality
     
     Decision criteria:
-    - APPROVE: High data quality (score > 80), all required documents present, no significant discrepancies
+    - APPROVE: High data quality (score > 80), both bill and discharge_summary present, no significant discrepancies
     - CONDITIONAL APPROVAL: Good data quality (score 60-80), minor discrepancies that can be resolved
-    - REJECT: Low data quality (score < 60), missing critical documents, significant discrepancies
+    - REJECT: Low data quality (score < 60), missing critical documents (bill or discharge_summary), significant discrepancies
     
     Medical claim specific considerations:
+    - Both bill and discharge_summary must be present
     - Hospital must be identifiable and legitimate
     - Amounts must be reasonable for medical procedures
-    - Patient information must be complete
+    - Patient information must be complete and consistent
     - Dates must be logical and not in the future
     
     Return format: {
@@ -109,9 +127,9 @@ decision_agent = LlmAgent(
     }
     
     Examples:
-    - {"status": "approved", "reason": "All required documents present with high data quality", "confidence_score": 95, "required_actions": []}
-    - {"status": "conditional_approval", "reason": "Good data but missing discharge summary", "confidence_score": 75, "required_actions": ["Submit discharge summary"]}
-    - {"status": "rejected", "reason": "Poor data quality and missing critical information", "confidence_score": 30, "required_actions": ["Resubmit with complete documentation"]}
+    - {"status": "approved", "reason": "Complete claim package with high data quality and all required documents present", "confidence_score": 95, "required_actions": []}
+    - {"status": "conditional_approval", "reason": "Good data but minor discrepancies in dates", "confidence_score": 75, "required_actions": ["Verify admission/discharge dates"]}
+    - {"status": "rejected", "reason": "Missing discharge summary document", "confidence_score": 30, "required_actions": ["Submit complete discharge summary"]}
     
     IMPORTANT: Return ONLY the JSON object, no other text.
     """,
@@ -159,65 +177,71 @@ async def run_claim_processing_pipeline(genai_extracted_documents: List[Dict], u
     final_results = []
 
     try:
-        for i, extracted_doc in enumerate(genai_extracted_documents):
-            logger.info(f"=== Enhanced ADK Pipeline Processing Document {i + 1} ===")
-            logger.info(f"ADK Processing extracted document: {extracted_doc}")
+        logger.info(f"=== Enhanced ADK Pipeline Processing Complete Claim Package ===")
+        logger.info(f"ADK Processing {len(genai_extracted_documents)} extracted documents: {genai_extracted_documents}")
 
-            # Use the actual GenAI extracted data instead of hardcoded data
-            validation_content = types.Content(parts=[types.Part.from_text(text=json.dumps(extracted_doc))])
+        # Process ALL extracted documents together as a complete claim package
+        complete_claim_data = {
+            "extracted_documents": genai_extracted_documents,
+            "document_count": len(genai_extracted_documents),
+            "document_types": [doc.get("type") for doc in genai_extracted_documents],
+        }
 
-            # Run the enhanced validation and decision pipeline
-            pipeline_runner = Runner(agent=enhanced_processing_pipeline, app_name="healthpay_claims", session_service=session_service)
+        # Create content with the complete claim data for validation
+        validation_content = types.Content(parts=[types.Part.from_text(text=json.dumps(complete_claim_data))])
 
-            pipeline_result = {}
-            async for event in pipeline_runner.run_async(user_id=user_id, session_id=session_id, new_message=validation_content):
-                if event.is_final_response():
-                    response_text = event.content.parts[0].text if event.content.parts else ""
-                    logger.info(f"Enhanced pipeline raw response: {response_text}")
+        # Run the enhanced validation and decision pipeline
+        pipeline_runner = Runner(agent=enhanced_processing_pipeline, app_name="healthpay_claims", session_service=session_service)
+
+        pipeline_result = {}
+        async for event in pipeline_runner.run_async(user_id=user_id, session_id=session_id, new_message=validation_content):
+            if event.is_final_response():
+                response_text = event.content.parts[0].text if event.content.parts else ""
+                logger.info(f"Enhanced pipeline raw response: {response_text}")
+                try:
+                    cleaned_response = clean_json_response(response_text)
+                    pipeline_result = json.loads(cleaned_response)
+                    logger.info(f"Enhanced pipeline parsed result: {pipeline_result}")
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse enhanced pipeline response: {response_text}")
+                    pipeline_result = {"error": "Failed to parse enhanced pipeline response"}
+
+        # Check session state to see what each agent produced
+        session = await session_service.get_session(app_name="healthpay_claims", user_id=user_id, session_id=session_id)
+        logger.info(f"Enhanced session state after pipeline: {session.state}")
+
+        # Extract data from session state
+        validation_result = {}
+        claim_decision = {}
+
+        # Parse session state to get individual agent results
+        if session.state:
+            for key, value in session.state.items():
+                if key == "validation_result":
                     try:
-                        cleaned_response = clean_json_response(response_text)
-                        pipeline_result = json.loads(cleaned_response)
-                        logger.info(f"Enhanced pipeline parsed result: {pipeline_result}")
+                        if isinstance(value, str):
+                            validation_result = json.loads(clean_json_response(value))
+                        else:
+                            validation_result = value
                     except json.JSONDecodeError:
-                        logger.error(f"Failed to parse enhanced pipeline response: {response_text}")
-                        pipeline_result = {"error": "Failed to parse enhanced pipeline response"}
+                        validation_result = {"error": "Failed to parse validation result"}
+                elif key == "claim_decision":
+                    try:
+                        if isinstance(value, str):
+                            claim_decision = json.loads(clean_json_response(value))
+                        else:
+                            claim_decision = value
+                    except json.JSONDecodeError:
+                        claim_decision = {"error": "Failed to parse claim decision"}
 
-            # Check session state to see what each agent produced
-            session = await session_service.get_session(app_name="healthpay_claims", user_id=user_id, session_id=session_id)
-            logger.info(f"Enhanced session state after pipeline: {session.state}")
+        # Create result with extracted fields set to None (ADK doesn't extract, uses GenAI data)
+        result = {
+            "extracted_fields": None,  # ADK doesn't extract, uses GenAI data
+            "validation_result": validation_result,
+            "claim_decision": claim_decision,
+        }
 
-            # Extract data from session state
-            validation_result = {}
-            claim_decision = {}
-
-            # Parse session state to get individual agent results
-            if session.state:
-                for key, value in session.state.items():
-                    if key == "validation_result":
-                        try:
-                            if isinstance(value, str):
-                                validation_result = json.loads(clean_json_response(value))
-                            else:
-                                validation_result = value
-                        except json.JSONDecodeError:
-                            validation_result = {"error": "Failed to parse validation result"}
-                    elif key == "claim_decision":
-                        try:
-                            if isinstance(value, str):
-                                claim_decision = json.loads(clean_json_response(value))
-                            else:
-                                claim_decision = value
-                        except json.JSONDecodeError:
-                            claim_decision = {"error": "Failed to parse claim decision"}
-
-            # Create result with extracted fields set to None (ADK doesn't extract, only validates/decides)
-            result = {
-                "extracted_fields": None,  # ADK doesn't extract, uses GenAI data
-                "validation_result": validation_result,
-                "claim_decision": claim_decision,
-            }
-
-            final_results.append(result)
+        final_results.append(result)
 
     except Exception as e:
         logger.error(f"Error running enhanced ADK claim processing pipeline: {e}")
