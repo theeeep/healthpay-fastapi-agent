@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from app.config.settings import Config
 from app.core.logger import logger
-from app.module.process_claim.agents.genai_agents import run_claim_processing_pipeline as run_genai_pipeline
+from app.module.process_claim.agents.document_extractor import run_claim_processing_pipeline as run_genai_pipeline
 from app.module.process_claim.agents.improved_adk_agents import run_claim_processing_pipeline as run_adk_pipeline
 from app.module.process_claim.schemas.schemas import (
     BillDocument,
@@ -65,31 +65,66 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
         logger.info("Step 1: Using LLM (Gemini) for classification, extraction, and basic validation")
         genai_results = await run_genai_pipeline(ocr_texts, user_id=str(uuid.uuid4()))
         logger.info(f"GenAI pipeline returned {len(genai_results)} results")
+        logger.info(f"GenAI results type: {type(genai_results)}")
+        logger.info(f"GenAI results content: {genai_results}")
 
         # Extract the actual documents from GenAI results for ADK processing
         genai_extracted_documents = []
-        for result in genai_results:
-            extracted_fields = result.get("extracted_fields")
-            if extracted_fields and isinstance(extracted_fields, dict):
-                genai_extracted_documents.append(extracted_fields)
+        for i, result in enumerate(genai_results):
+            logger.info(f"Processing GenAI result {i}: type={type(result)}, content={result}")
+
+            # Handle case where result might be a list
+            if isinstance(result, list):
+                logger.warning(f"GenAI result {i} is a list, processing each item")
+                for item in result:
+                    if isinstance(item, dict):
+                        extracted_fields = item.get("extracted_fields")
+                        if extracted_fields and isinstance(extracted_fields, dict):
+                            genai_extracted_documents.append(extracted_fields)
+                continue
+
+            # Handle case where result is a dictionary
+            if isinstance(result, dict):
+                extracted_fields = result.get("extracted_fields")
+                if extracted_fields and isinstance(extracted_fields, dict):
+                    genai_extracted_documents.append(extracted_fields)
+            else:
+                logger.warning(f"GenAI result {i} is neither list nor dict: {type(result)}")
+
+        logger.info(f"Extracted {len(genai_extracted_documents)} documents for ADK processing")
 
         # Step 2: Use ADK agents for enhanced validation and decision making (multi-agent orchestration)
         logger.info("Step 2: Using ADK agents for enhanced validation and decision making")
         adk_results = await run_adk_pipeline(genai_extracted_documents, user_id=str(uuid.uuid4()))
         logger.info(f"ADK pipeline returned {len(adk_results)} results")
+        logger.info(f"ADK results type: {type(adk_results)}")
+        logger.info(f"ADK results content: {adk_results}")
 
         # Combine results: Use GenAI for extraction, ADK for enhanced validation/decision
         agent_results = []
 
         # Add GenAI results (good extraction, basic validation, no decisions)
-        for genai_result in genai_results:
-            agent_results.append(genai_result)
+        for i, genai_result in enumerate(genai_results):
+            logger.info(f"Adding GenAI result {i}: type={type(genai_result)}")
+
+            # Handle case where genai_result might be a list
+            if isinstance(genai_result, list):
+                logger.info(f"GenAI result {i} is a list, adding each item")
+                for item in genai_result:
+                    if isinstance(item, dict):
+                        agent_results.append(item)
+            elif isinstance(genai_result, dict):
+                agent_results.append(genai_result)
+            else:
+                logger.warning(f"Skipping GenAI result {i} with unexpected type: {type(genai_result)}")
 
         # Add ADK results (enhanced validation/decision) - but only if they provide value
-        for adk_result in adk_results:
+        for i, adk_result in enumerate(adk_results):
+            logger.info(f"Processing ADK result {i}: type={type(adk_result)}")
+
             # Ensure adk_result is a dictionary
             if not isinstance(adk_result, dict):
-                logger.warning(f"ADK result is not a dictionary: {type(adk_result)}, value: {adk_result}")
+                logger.warning(f"ADK result {i} is not a dictionary: {type(adk_result)}, value: {adk_result}")
                 continue
 
             # Only add ADK results if they have enhanced validation or decision making
@@ -110,6 +145,10 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
 
     except Exception as e:
         logger.error(f"Agent pipeline error: {e}")
+        logger.error(f"Error type: {type(e)}")
+        import traceback
+
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Internal processing error") from e
 
     # Parse and validate agent output into Pydantic models

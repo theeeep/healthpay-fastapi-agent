@@ -16,37 +16,6 @@ genai.configure(api_key=Config.GOOGLE_API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 
-def clean_json_response(response_text: str) -> str:
-    """Clean JSON response that might be wrapped in markdown code blocks or have explanatory text."""
-    # Remove markdown code block formatting
-    response_text = re.sub(r"^```json\s*", "", response_text)
-    response_text = re.sub(r"\s*```$", "", response_text)
-    response_text = response_text.strip()
-
-    # Find JSON array or object in the response
-    # Look for array starting with [
-    array_match = re.search(r"\[[\s\S]*\]", response_text, re.DOTALL)
-    if array_match:
-        return array_match.group(0)
-
-    # Look for object starting with { - use a more robust approach
-    # Find the first { and then find the matching closing }
-    start_idx = response_text.find("{")
-    if start_idx != -1:
-        # Count braces to find the matching closing brace
-        brace_count = 0
-        for i in range(start_idx, len(response_text)):
-            if response_text[i] == "{":
-                brace_count += 1
-            elif response_text[i] == "}":
-                brace_count -= 1
-                if brace_count == 0:
-                    return response_text[start_idx : i + 1]
-
-    # If no JSON found, return the original text stripped
-    return response_text.strip()
-
-
 async def classify_document(ocr_text: str) -> dict:
     """Classify the document type based on OCR text."""
     prompt = f"""
