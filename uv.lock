@@ -731,6 +731,7 @@ dependencies = [
     { name = "loguru" },
     { name = "mistralai" },
     { name = "pydantic-settings" },
+    { name = "scalar-fastapi" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -747,6 +748,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "mistralai", specifier = ">=1.8.2" },
     { name = "pydantic-settings", specifier = ">=2.9.1" },
+    { name = "scalar-fastapi", specifier = ">=1.0.3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.3" },
 ]
 
@@ -1312,6 +1314,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/ef/b960ab4818f90ff59e571d03c3f992828d4683561095e80f9ef31f3d58b7/ruff-0.12.0-py3-none-win32.whl", hash = "sha256:7162a4c816f8d1555eb195c46ae0bd819834d2a3f18f98cc63819a7b46f474fb", size = 10525289, upload-time = "2025-06-17T15:19:19.688Z" },
     { url = "https://files.pythonhosted.org/packages/34/93/8b16034d493ef958a500f17cda3496c63a537ce9d5a6479feec9558f1695/ruff-0.12.0-py3-none-win_amd64.whl", hash = "sha256:d00b7a157b8fb6d3827b49d3324da34a1e3f93492c1f97b08e222ad7e9b291e0", size = 11598311, upload-time = "2025-06-17T15:19:21.785Z" },
     { url = "https://files.pythonhosted.org/packages/d0/33/4d3e79e4a84533d6cd526bfb42c020a23256ae5e4265d858bd1287831f7d/ruff-0.12.0-py3-none-win_arm64.whl", hash = "sha256:8cd24580405ad8c1cc64d61725bca091d6b6da7eb3d36f72cc605467069d7e8b", size = 10724946, upload-time = "2025-06-17T15:19:23.952Z" },
+]
+
+[[package]]
+name = "scalar-fastapi"
+version = "1.0.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/04/08ae9e86f24cd9b43bc5b2068fc5d1dcd3e7efa6db860290734d7d742512/scalar_fastapi-1.0.3.tar.gz", hash = "sha256:9e9cb8398e298cd435a0171eebe1675b8899eb21e47c238db0d48783143f0ffb", size = 4107, upload-time = "2024-08-19T02:58:06.739Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6d/9e/ca0ffc3fc4788c6e1367b96a70f2d6ee33f91d580664a8142ba7ee292ef2/scalar_fastapi-1.0.3-py3-none-any.whl", hash = "sha256:4a47a140795097ad034518ce0e32940f2c54f0f4bc60e4c3289ca30a7e6f954d", size = 4579, upload-time = "2024-08-19T02:58:05.203Z" },
 ]
 
 [[package]]

@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from scalar_fastapi import get_scalar_api_reference
 
 from app.config.settings import Config
 from app.core.logger import logger
@@ -37,6 +38,12 @@ app = FastAPI(
     redoc_url=f"{API_PREFIX}/redoc",
     openapi_url=f"{API_PREFIX}/openapi.json",
 )
+
+
+@app.get("/scalar", include_in_schema=False)
+async def scalar_html():
+    return get_scalar_api_reference(openapi_url=app.openapi_url, title=app.title, scalar_theme="fastify")
+
 
 # Add CORS middleware
 app.add_middleware(
