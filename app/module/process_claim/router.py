@@ -121,6 +121,7 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
         # Add ADK results (enhanced validation/decision) - but only if they provide value
         for i, adk_result in enumerate(adk_results):
             logger.info(f"Processing ADK result {i}: type={type(adk_result)}")
+            logger.info(f"ADK result content: {adk_result}")
 
             # Ensure adk_result is a dictionary
             if not isinstance(adk_result, dict):
@@ -131,8 +132,14 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
             validation = adk_result.get("validation_result", {})
             decision = adk_result.get("claim_decision", {})
 
+            logger.info(f"ADK validation: {validation}")
+            logger.info(f"ADK decision: {decision}")
+
+            # Always add ADK results if they have a claim decision, regardless of scores
             if (
-                validation.get("data_quality_score", 0) > 0
+                isinstance(decision, dict)
+                and decision.get("status")  # Check for any claim decision
+                or validation.get("data_quality_score", 0) > 0
                 or decision.get("confidence_score", 0) > 0
                 or validation.get("recommendations")
                 or decision.get("required_actions")
@@ -140,6 +147,14 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
                 # ADK results should only contain validation and decision, not extracted fields
                 adk_result["extracted_fields"] = None  # Ensure no extraction from ADK
                 agent_results.append(adk_result)
+                logger.info(f"Added ADK result {i} with decision: {decision.get('status', 'unknown') if isinstance(decision, dict) else 'unknown'}")
+            else:
+                logger.warning(f"Skipping ADK result {i} - no meaningful content found")
+                logger.warning(f"Decision status: {decision.get('status') if isinstance(decision, dict) else 'not a dict'}")
+                logger.warning(f"Data quality score: {validation.get('data_quality_score', 0)}")
+                logger.warning(f"Confidence score: {decision.get('confidence_score', 0) if isinstance(decision, dict) else 0}")
+                logger.warning(f"Has recommendations: {bool(validation.get('recommendations'))}")
+                logger.warning(f"Has required actions: {bool(decision.get('required_actions') if isinstance(decision, dict) else False)}")
 
         logger.info(f"Combined {len(agent_results)} total results from both pipelines")
 
@@ -276,19 +291,33 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
 
     # Determine final claim decision based on ADK results only
     adk_claim_decisions = []
-    for result in agent_results:
+    logger.info(f"Looking for ADK claim decisions in {len(agent_results)} agent results")
+
+    for i, result in enumerate(agent_results):
+        logger.info(f"Checking agent result {i}: {result}")
         claim_decision = result.get("claim_decision", {})
+        logger.info(f"Claim decision in result {i}: {claim_decision}")
+
         if isinstance(claim_decision, dict):
             # Only use ADK decisions (not GenAI pending decisions)
             if claim_decision.get("status") != "pending":
                 adk_claim_decisions.append(claim_decision)
+                logger.info(f"Added ADK claim decision: {claim_decision}")
+            else:
+                logger.info(f"Skipping pending decision: {claim_decision}")
+        else:
+            logger.warning(f"Claim decision is not a dict: {type(claim_decision)}")
+
+    logger.info(f"Found {len(adk_claim_decisions)} ADK claim decisions")
 
     if not adk_claim_decisions:
         claim_decision = ClaimDecision(status="rejected", reason="No ADK claim decision returned")
+        logger.warning("No ADK claim decisions found - using fallback")
     else:
         # Use the first ADK decision (they should all be consistent)
         adk_decision = adk_claim_decisions[0]
         claim_decision = ClaimDecision(status=adk_decision.get("status", "rejected"), reason=adk_decision.get("reason", "Unknown reason"))
+        logger.info(f"Using ADK decision: {claim_decision}")
 
     return ProcessClaimResponse(
         documents=documents,

@@ -189,23 +189,33 @@ async def run_claim_processing_pipeline(genai_extracted_documents: List[Dict], u
 
         # Parse session state to get individual agent results
         if session.state:
+            logger.info(f"Session state keys: {list(session.state.keys())}")
             for key, value in session.state.items():
+                logger.info(f"Processing session key: {key}, value type: {type(value)}")
                 if key == "validation_result":
                     try:
                         if isinstance(value, str):
+                            logger.info(f"Validation result string: {value}")
                             validation_result = json.loads(clean_json_response(value))
                         else:
                             validation_result = value
-                    except json.JSONDecodeError:
+                        logger.info(f"Parsed validation_result: {validation_result}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse validation result: {e}")
                         validation_result = {"error": "Failed to parse validation result"}
                 elif key == "claim_decision":
                     try:
                         if isinstance(value, str):
+                            logger.info(f"Claim decision string: {value}")
                             claim_decision = json.loads(clean_json_response(value))
                         else:
                             claim_decision = value
-                    except json.JSONDecodeError:
+                        logger.info(f"Parsed claim_decision: {claim_decision}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse claim decision: {e}")
                         claim_decision = {"error": "Failed to parse claim decision"}
+        else:
+            logger.warning("Session state is empty - no agent results found")
 
         # Create result with extracted fields set to None (ADK doesn't extract, uses GenAI data)
         result = {
@@ -214,6 +224,7 @@ async def run_claim_processing_pipeline(genai_extracted_documents: List[Dict], u
             "claim_decision": claim_decision,
         }
 
+        logger.info(f"ADK final result: {result}")
         final_results.append(result)
 
     except Exception as e:

@@ -10,17 +10,7 @@ def clean_json_response(response_text: str) -> str:
     response_text = re.sub(r"\s*```$", "", response_text)
     response_text = response_text.strip()
 
-    # Try to find JSON array first (for document extraction)
-    array_match = re.search(r"\[[\s\S]*\]", response_text, re.DOTALL)
-    if array_match:
-        try:
-            # Validate it's actually JSON
-            json.loads(array_match.group(0))
-            return array_match.group(0)
-        except json.JSONDecodeError:
-            pass  # Continue to object search
-
-    # Try to find JSON object (for ADK agents)
+    # Try to find JSON object first (for ADK agents)
     start_idx = response_text.find("{")
     if start_idx != -1:
         # Count braces to find the matching closing brace
@@ -36,7 +26,17 @@ def clean_json_response(response_text: str) -> str:
                         json.loads(response_text[start_idx : i + 1])
                         return response_text[start_idx : i + 1]
                     except json.JSONDecodeError:
-                        pass  # Continue to next search
+                        pass  # Continue to array search
+
+    # Try to find JSON array (for document extraction)
+    array_match = re.search(r"\[[\s\S]*\]", response_text, re.DOTALL)
+    if array_match:
+        try:
+            # Validate it's actually JSON
+            json.loads(array_match.group(0))
+            return array_match.group(0)
+        except json.JSONDecodeError:
+            pass  # Continue to object search
 
     # If no valid JSON found, return the original text stripped
     return response_text.strip()
