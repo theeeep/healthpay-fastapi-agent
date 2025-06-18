@@ -1,4 +1,3 @@
-import asyncio
 import json
 import re
 import uuid
@@ -129,9 +128,12 @@ decision_agent = LlmAgent(
     IMPORTANT: For APPROVED claims, use exactly this reason: "All required documents present and data is consistent"
     
     Examples:
-    - {"status": "approved", "reason": "All required documents present and data is consistent", "confidence_score": 95, "required_actions": []}
-    - {"status": "conditional_approval", "reason": "Good data but minor discrepancies in dates", "confidence_score": 75, "required_actions": ["Verify admission/discharge dates"]}
-    - {"status": "rejected", "reason": "Missing discharge summary document", "confidence_score": 30, "required_actions": ["Submit complete discharge summary"]}
+    - {"status": "approved", "reason": "All required documents present and data is consistent", 
+       "confidence_score": 95, "required_actions": []}
+    - {"status": "conditional_approval", "reason": "Good data but minor discrepancies in dates", 
+       "confidence_score": 75, "required_actions": ["Verify admission/discharge dates"]}
+    - {"status": "rejected", "reason": "Missing discharge summary document", 
+       "confidence_score": 30, "required_actions": ["Submit complete discharge summary"]}
     
     IMPORTANT: Return ONLY the JSON object, no other text.
     """,
@@ -179,7 +181,7 @@ async def run_claim_processing_pipeline(genai_extracted_documents: List[Dict], u
     final_results = []
 
     try:
-        logger.info(f"=== Enhanced ADK Pipeline Processing Complete Claim Package ===")
+        logger.info("=== Enhanced ADK Pipeline Processing Complete Claim Package ===")
         logger.info(f"ADK Processing {len(genai_extracted_documents)} extracted documents: {genai_extracted_documents}")
 
         # Process ALL extracted documents together as a complete claim package

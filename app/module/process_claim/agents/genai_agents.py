@@ -1,4 +1,3 @@
-import asyncio
 import json
 import re
 import uuid
@@ -57,8 +56,11 @@ async def classify_document(ocr_text: str) -> dict:
     - discharge_summary: Discharge summaries, medical reports, patient summaries, inpatient summaries
 
     Look for these key indicators:
-    - BILL indicators: "Bill", "Invoice", "Amount", "Total", "Payable", "GST", "Final Bill Summary", "Covering Letter", "Bill No"
-    - DISCHARGE indicators: "Discharge Summary", "Inpatient Summary", "Patient Name", "Diagnosis", "Admission", "Discharge Date", "Department of", "Admitted on", "Discharged On", "Treating Doctor"
+    - BILL indicators: "Bill", "Invoice", "Amount", "Total", "Payable", "GST", 
+      "Final Bill Summary", "Covering Letter", "Bill No"
+    - DISCHARGE indicators: "Discharge Summary", "Inpatient Summary", "Patient Name", 
+      "Diagnosis", "Admission", "Discharge Date", "Department of", "Admitted on", 
+      "Discharged On", "Treating Doctor"
 
     IMPORTANT CLASSIFICATION RULES:
     1. If the document contains BOTH bill information AND discharge information, classify based on PRIMARY content:
@@ -279,7 +281,9 @@ async def extract_multiple_documents_from_ocr(ocr_text: str) -> list:
     prompt = f"""
     Analyze this OCR text and extract ALL possible documents. A single PDF can contain multiple document types.
     
-    IMPORTANT: Consolidate multiple bills into a SINGLE bill document. If there are multiple bill amounts (payable, non-payable, total), use the TOTAL amount and create only ONE bill document.
+    IMPORTANT: Consolidate multiple bills into a SINGLE bill document. 
+    If there are multiple bill amounts (payable, non-payable, total), 
+    use the TOTAL amount and create only ONE bill document.
     
     Extract these fields if available:
     - patient_name: Name of the patient
@@ -302,7 +306,8 @@ async def extract_multiple_documents_from_ocr(ocr_text: str) -> list:
     OCR Text:
     {ocr_text}
     
-    CRITICAL: Return ONLY a JSON array of documents. Do not include any explanatory text, markdown formatting, or additional text before or after the JSON.
+    CRITICAL: Return ONLY a JSON array of documents. Do not include any explanatory text, 
+    markdown formatting, or additional text before or after the JSON.
     
     Each document should have a "type" field and appropriate fields:
     
