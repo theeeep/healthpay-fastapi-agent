@@ -4,6 +4,7 @@ from typing import List
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import ValidationError
 
+from app.config.settings import Config
 from app.core.logger import logger
 from app.module.process_claim.agents.genai_agents import run_claim_processing_pipeline as run_genai_pipeline
 from app.module.process_claim.agents.improved_adk_agents import run_claim_processing_pipeline as run_adk_pipeline
@@ -22,22 +23,40 @@ process_claim_router = APIRouter()
 @process_claim_router.post("/process-claim", response_model=ProcessClaimResponse)
 async def process_claim_documents(files: List[UploadFile] = File(...)):
     """Process medical insurance claim documents using AI-driven workflow."""
+    # Validate number of files
+    if len(files) > Config.MAX_FILES_PER_REQUEST:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Too many files. Maximum {Config.MAX_FILES_PER_REQUEST} files allowed per request.",
+        )
+
     ocr_texts = []
 
     # Validate and process uploaded files
     for file in files:
-        if file.content_type != "application/pdf":
+        # Validate file type
+        if file.content_type not in Config.SUPPORTED_FILE_TYPES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid file type: {file.filename}. Only PDF files are allowed.",
             )
+
+        # Validate filename
         if file.filename is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Uploaded file is missing a filename.",
             )
 
+        # Validate file size (rough estimation)
         content = await file.read()
+        file_size_mb = len(content) / (1024 * 1024)
+        if file_size_mb > Config.MAX_FILE_SIZE_MB:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File {file.filename} is too large. Maximum {Config.MAX_FILE_SIZE_MB}MB allowed.",
+            )
+
         ocr_text = await process_ocr(content, file.filename)
         ocr_texts.append(ocr_text)
 
@@ -101,10 +120,6 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
 
     logger.info(f"Processing {len(agent_results)} agent results")
     for i, result in enumerate(agent_results):
-        logger.info(f"Processing agent result {i + 1}/{len(agent_results)}")
-        logger.info(f"Agent result {i} type: {type(result)}")
-        logger.info(f"Agent result {i} keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
-
         # Handle case where result might be a string or have unexpected structure
         if isinstance(result, str):
             logger.warning(f"Agent returned string instead of dict: {result}")
@@ -116,12 +131,9 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
 
         # Extract documents - assuming 'extracted_fields' contains document info
         extracted = result.get("extracted_fields", {})
-        logger.info(f"Extracted fields type: {type(extracted)}")
-        logger.info(f"Extracted fields content: {extracted}")
 
         # Skip if no extracted fields (ADK pipeline only provides validation/decision)
         if extracted is None:
-            logger.info(f"Skipping document processing for result {i} - no extracted fields (ADK validation/decision only)")
             # Still collect validation and decision data
             validation_result = result.get("validation_result", {})
             if isinstance(validation_result, dict):
@@ -148,7 +160,6 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
             continue
 
         doc_type = extracted.get("type")
-        logger.info(f"Document type: {doc_type}")
 
         # Quality check: Skip poor quality documents
         hospital_name = extracted.get("hospital_name", "")

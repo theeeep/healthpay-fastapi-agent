@@ -147,7 +147,7 @@ async def run_claim_processing_pipeline(genai_extracted_documents: List[Dict], u
 
     try:
         logger.info("=== Enhanced ADK Pipeline Processing Complete Claim Package ===")
-        logger.info(f"ADK Processing {len(genai_extracted_documents)} extracted documents: {genai_extracted_documents}")
+        logger.info(f"ADK Processing {len(genai_extracted_documents)} extracted documents")
 
         # Process ALL extracted documents together as a complete claim package
         complete_claim_data = {
@@ -166,16 +166,12 @@ async def run_claim_processing_pipeline(genai_extracted_documents: List[Dict], u
         async for event in pipeline_runner.run_async(user_id=user_id, session_id=session_id, new_message=validation_content):
             if event.is_final_response():
                 response_text = event.content.parts[0].text if event.content.parts else ""
-                logger.info(f"Enhanced pipeline raw response: {response_text}")
                 try:
                     cleaned_response = clean_json_response(response_text)
-                    logger.info(f"Cleaned response: {cleaned_response}")
                     parsed_result = json.loads(cleaned_response)
-                    logger.info(f"Enhanced pipeline parsed result: {parsed_result}")
                     # Only set pipeline_result if it's a dictionary, not a list
                     if isinstance(parsed_result, dict):
                         pipeline_result = parsed_result
-                        logger.info(f"Set pipeline_result to dict: {pipeline_result}")
                     else:
                         logger.warning(f"Pipeline returned non-dict result: {type(parsed_result)}")
                 except json.JSONDecodeError as e:

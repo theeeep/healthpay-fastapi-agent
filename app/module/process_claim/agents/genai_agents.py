@@ -166,17 +166,13 @@ async def run_claim_processing_pipeline(ocr_texts: list, user_id: str = None):
     try:
         for i, ocr_text in enumerate(ocr_texts):
             logger.info(f"=== GenAI Pipeline Processing Document {i + 1} ===")
-            logger.info(f"GenAI OCR Text length: {len(ocr_text)} characters")
-            logger.info(f"GenAI OCR Text (first 1000 chars): {ocr_text[:1000]}...")
 
             # Step 1: Extract multiple documents from OCR
             extracted_documents = await extract_multiple_documents_from_ocr(ocr_text)
-            logger.info(f"GenAI Extracted {len(extracted_documents)} documents: {extracted_documents}")
+            logger.info(f"GenAI Extracted {len(extracted_documents)} documents")
 
             # Step 2: Process each extracted document (extraction only, no validation)
             for j, doc in enumerate(extracted_documents):
-                logger.info(f"Processing extracted document {j + 1}/{len(extracted_documents)}: {doc.get('type', 'unknown')}")
-
                 # GenAI only extracts, ADK handles validation and decisions
                 validation_result = {"missing_documents": [], "discrepancies": []}  # Empty validation from GenAI
                 claim_decision = {"status": "pending", "reason": "Decision pending ADK processing"}
@@ -341,9 +337,6 @@ async def extract_multiple_documents_from_ocr(ocr_text: str) -> list:
     response = model.generate_content(prompt)
     try:
         cleaned_response = clean_json_response(response.text)
-        logger.info(f"Raw response: {response.text}")
-        logger.info(f"Cleaned response: {cleaned_response}")
-
         documents = json.loads(cleaned_response)
 
         # Ensure it's a list
@@ -367,7 +360,7 @@ async def extract_multiple_documents_from_ocr(ocr_text: str) -> list:
                 # Non-bill documents (discharge summaries) are always unique
                 unique_documents.append(doc)
 
-        logger.info(f"Extracted documents (after deduplication): {unique_documents}")
+        logger.info(f"Extracted {len(unique_documents)} documents (after deduplication)")
         return unique_documents
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse extraction response: {response.text}")
