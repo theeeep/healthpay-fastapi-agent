@@ -9,8 +9,8 @@ from datetime import date, datetime
 from typing import Dict, List, Optional
 
 from app.core.logger import logger
-from app.module.process_claim.agents.adk_validation_agent import run_claim_processing_pipeline as run_adk_pipeline
-from app.module.process_claim.agents.genai_extraction_agent import run_claim_processing_pipeline as run_genai_pipeline
+from app.module.process_claim.agents.adk_agent import run_claim_processing_pipeline as run_adk_pipeline
+from app.module.process_claim.llm.document_classifier import run_claim_processing_pipeline as run_genai_pipeline
 from app.module.process_claim.schemas.schemas import (
     BillDocument,
     ClaimDecision,

@@ -9,8 +9,8 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from app.core.logger import logger
-from app.core.utils import clean_json_response, parse_json_safely
-from app.module.process_claim.agents.prompt_manager import prompt_manager
+from app.core.utils import clean_json_response
+from app.module.process_claim.prompts.prompt_manager import prompt_manager
 
 dotenv.load_dotenv()
 

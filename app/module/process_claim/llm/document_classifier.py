@@ -1,13 +1,12 @@
 import json
-import re
 import uuid
 
 import google.generativeai as genai
 
 from app.config.settings import Config
 from app.core.logger import logger
-from app.core.utils import clean_json_response, parse_json_safely
-from app.module.process_claim.agents.prompt_manager import prompt_manager
+from app.core.utils import clean_json_response
+from app.module.process_claim.prompts.prompt_manager import prompt_manager
 
 # Configure Google GenAI
 genai.configure(api_key=Config.GOOGLE_API_KEY)
@@ -101,7 +100,7 @@ async def run_claim_processing_pipeline(ocr_results: list, user_id: str = None):
             logger.info(f"GenAI Extracted {len(extracted_documents)} documents")
 
             # Step 3: Process each extracted document (extraction only, no validation)
-            for j, doc in enumerate(extracted_documents):
+            for _, doc in enumerate(extracted_documents):
                 # Add classification info to the document
                 doc["classification"] = {"type": doc_type, "confidence": confidence, "reasoning": reasoning}
 
