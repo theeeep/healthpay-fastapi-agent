@@ -19,7 +19,6 @@ class DischargeSummaryDocument(BaseModel):
     discharge_date: date
 
 
-# Union type to allow for different document types
 Document = Union[BillDocument, DischargeSummaryDocument]
 
 
