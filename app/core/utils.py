@@ -5,12 +5,43 @@ from typing import Any
 
 def clean_json_response(response_text: str) -> str:
     """Clean JSON response that might be wrapped in markdown code blocks or have explanatory text."""
+    logger = None
+    try:
+        from app.core.logger import logger
+    except ImportError:
+        pass
+
+    if logger:
+        logger.debug(f"Cleaning JSON response: {response_text[:200]}...")
+
     # Remove markdown code block formatting
     response_text = re.sub(r"^```json\s*", "", response_text)
     response_text = re.sub(r"\s*```$", "", response_text)
     response_text = response_text.strip()
 
-    # Try to find JSON object first (for ADK agents)
+    if logger:
+        logger.debug(f"After markdown removal: {response_text[:200]}...")
+
+    # Try to find JSON array first (for document extraction - priority)
+    array_match = re.search(r"\[[\s\S]*\]", response_text, re.DOTALL)
+    if array_match:
+        try:
+            # Validate it's actually JSON
+            json.loads(array_match.group(0))
+            # Only return non-empty arrays
+            if array_match.group(0).strip() != "[]":
+                if logger:
+                    logger.debug(f"Found valid JSON array: {array_match.group(0)[:100]}...")
+                return array_match.group(0)
+            else:
+                if logger:
+                    logger.debug("Found empty array, skipping")
+        except json.JSONDecodeError:
+            if logger:
+                logger.debug("JSON array validation failed")
+            pass  # Continue to object search
+
+    # Try to find JSON object (for ADK agents)
     start_idx = response_text.find("{")
     if start_idx != -1:
         # Count braces to find the matching closing brace
@@ -23,22 +54,19 @@ def clean_json_response(response_text: str) -> str:
                 if brace_count == 0:
                     try:
                         # Validate it's actually JSON
-                        json.loads(response_text[start_idx : i + 1])
-                        return response_text[start_idx : i + 1]
+                        json_obj = response_text[start_idx : i + 1]
+                        json.loads(json_obj)
+                        if logger:
+                            logger.debug(f"Found valid JSON object: {json_obj[:100]}...")
+                        return json_obj
                     except json.JSONDecodeError:
-                        pass  # Continue to array search
-
-    # Try to find JSON array (for document extraction)
-    array_match = re.search(r"\[[\s\S]*\]", response_text, re.DOTALL)
-    if array_match:
-        try:
-            # Validate it's actually JSON
-            json.loads(array_match.group(0))
-            return array_match.group(0)
-        except json.JSONDecodeError:
-            pass  # Continue to object search
+                        if logger:
+                            logger.debug("JSON object validation failed")
+                        pass  # Continue to other searches
 
     # If no valid JSON found, return the original text stripped
+    if logger:
+        logger.debug(f"No valid JSON found, returning stripped text: {response_text[:100]}...")
     return response_text.strip()
 
 

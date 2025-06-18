@@ -362,31 +362,65 @@ async def extract_multiple_documents_from_ocr(ocr_text: str) -> list:
             doc_type = single_doc.get("type")
 
             if doc_type == "bill":
-                # We have a bill, try to create discharge summary
-                logger.info("Creating discharge summary from bill data")
-                discharge_summary = {
-                    "type": "discharge_summary",
-                    "patient_name": single_doc.get("patient_name", "Unknown Patient"),
-                    "diagnosis": "LEFT KNEE INFECTED OSTEOARTHRITIS",  # Common diagnosis pattern
-                    "admission_date": "2025-02-07",  # From the bill date pattern
-                    "discharge_date": single_doc.get("date_of_service", "2025-02-11"),
-                    "hospital_name": single_doc.get("hospital_name", "Unknown Hospital"),
-                }
-                unique_documents.append(discharge_summary)
-                logger.info(f"Added inferred discharge summary: {discharge_summary}")
+                # We have a bill, try to create discharge summary only if we have meaningful data
+                logger.info("Attempting to create discharge summary from bill data")
+
+                # Only create discharge summary if we have meaningful patient and hospital data
+                patient_name = single_doc.get("patient_name")
+                hospital_name = single_doc.get("hospital_name")
+                date_of_service = single_doc.get("date_of_service")
+
+                if (
+                    patient_name
+                    and patient_name != "Unknown Patient"
+                    and hospital_name
+                    and hospital_name != "Unknown Hospital"
+                    and date_of_service
+                    and date_of_service != "2024-01-01"
+                ):
+                    # Try to extract additional data from OCR for discharge summary
+                    discharge_summary = {
+                        "type": "discharge_summary",
+                        "patient_name": patient_name,
+                        "diagnosis": "Unknown Diagnosis",  # Let validation catch this
+                        "admission_date": "Unknown",  # Let validation catch this
+                        "discharge_date": date_of_service,  # Use bill date as discharge date
+                        "hospital_name": hospital_name,
+                    }
+                    unique_documents.append(discharge_summary)
+                    logger.info(f"Added discharge summary with available data: {discharge_summary}")
+                else:
+                    logger.info("Insufficient data to create meaningful discharge summary - will be caught by validation")
 
             elif doc_type == "discharge_summary":
-                # We have a discharge summary, try to create bill
-                logger.info("Creating bill from discharge summary data")
-                bill = {
-                    "type": "bill",
-                    "hospital_name": single_doc.get("hospital_name", "Unknown Hospital"),
-                    "total_amount": 435639.15,  # Common amount pattern
-                    "date_of_service": single_doc.get("discharge_date", "2025-02-11"),
-                    "patient_name": single_doc.get("patient_name", "Unknown Patient"),
-                }
-                unique_documents.append(bill)
-                logger.info(f"Added inferred bill: {bill}")
+                # We have a discharge summary, try to create bill only if we have meaningful data
+                logger.info("Attempting to create bill from discharge summary data")
+
+                # Only create bill if we have meaningful patient and hospital data
+                patient_name = single_doc.get("patient_name")
+                hospital_name = single_doc.get("hospital_name")
+                discharge_date = single_doc.get("discharge_date")
+
+                if (
+                    patient_name
+                    and patient_name != "Unknown Patient"
+                    and hospital_name
+                    and hospital_name != "Unknown Hospital"
+                    and discharge_date
+                    and discharge_date != "2024-01-01"
+                ):
+                    # Try to extract additional data from OCR for bill
+                    bill = {
+                        "type": "bill",
+                        "hospital_name": hospital_name,
+                        "total_amount": 0.0,  # Let validation catch this
+                        "date_of_service": discharge_date,  # Use discharge date as service date
+                        "patient_name": patient_name,
+                    }
+                    unique_documents.append(bill)
+                    logger.info(f"Added bill with available data: {bill}")
+                else:
+                    logger.info("Insufficient data to create meaningful bill - will be caught by validation")
 
         logger.info(f"Extracted {len(unique_documents)} documents (after deduplication and enhancement)")
         logger.info(f"Final documents: {unique_documents}")

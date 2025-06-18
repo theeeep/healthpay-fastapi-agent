@@ -207,12 +207,16 @@ async def run_claim_processing_pipeline(genai_extracted_documents: List[Dict], u
                     try:
                         if isinstance(value, str):
                             logger.info(f"Claim decision string: {value}")
-                            claim_decision = json.loads(clean_json_response(value))
+                            # Use the original clean_json_response function
+                            cleaned_value = clean_json_response(value)
+                            logger.info(f"Cleaned claim decision: {cleaned_value}")
+                            claim_decision = json.loads(cleaned_value)
                         else:
                             claim_decision = value
                         logger.info(f"Parsed claim_decision: {claim_decision}")
                     except json.JSONDecodeError as e:
                         logger.error(f"Failed to parse claim decision: {e}")
+                        logger.error(f"Raw claim decision value: {value}")
                         claim_decision = {"error": "Failed to parse claim decision"}
         else:
             logger.warning("Session state is empty - no agent results found")

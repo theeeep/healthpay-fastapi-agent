@@ -139,10 +139,10 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
             if (
                 isinstance(decision, dict)
                 and decision.get("status")  # Check for any claim decision
-                or validation.get("data_quality_score", 0) > 0
-                or decision.get("confidence_score", 0) > 0
-                or validation.get("recommendations")
-                or decision.get("required_actions")
+                or (isinstance(validation, dict) and validation.get("data_quality_score", 0) > 0)
+                or (isinstance(decision, dict) and decision.get("confidence_score", 0) > 0)
+                or (isinstance(validation, dict) and validation.get("recommendations"))
+                or (isinstance(decision, dict) and decision.get("required_actions"))
             ):
                 # ADK results should only contain validation and decision, not extracted fields
                 adk_result["extracted_fields"] = None  # Ensure no extraction from ADK
@@ -151,9 +151,9 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
             else:
                 logger.warning(f"Skipping ADK result {i} - no meaningful content found")
                 logger.warning(f"Decision status: {decision.get('status') if isinstance(decision, dict) else 'not a dict'}")
-                logger.warning(f"Data quality score: {validation.get('data_quality_score', 0)}")
+                logger.warning(f"Data quality score: {validation.get('data_quality_score', 0) if isinstance(validation, dict) else 'not a dict'}")
                 logger.warning(f"Confidence score: {decision.get('confidence_score', 0) if isinstance(decision, dict) else 0}")
-                logger.warning(f"Has recommendations: {bool(validation.get('recommendations'))}")
+                logger.warning(f"Has recommendations: {bool(validation.get('recommendations') if isinstance(validation, dict) else False)}")
                 logger.warning(f"Has required actions: {bool(decision.get('required_actions') if isinstance(decision, dict) else False)}")
 
         logger.info(f"Combined {len(agent_results)} total results from both pipelines")
