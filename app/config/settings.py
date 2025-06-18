@@ -12,7 +12,8 @@ class Settings(BaseSettings):
 
     # Application Settings
     APP_NAME: str = "HealthPay API"
-    APP_VERSION: str = "v1.0.0"
+    APP_VERSION: str = "1.0.0"  # Full semantic version
+    API_VERSION: str = "v1"  # API route version
     DEBUG: bool = False
 
     # AI Model Settings
