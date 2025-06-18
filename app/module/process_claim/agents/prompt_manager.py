@@ -66,6 +66,41 @@ class PromptManager:
                 required_vars=["ocr_text"],
                 description="Classify document type based on OCR text",
             ),
+            "classify_document_with_filename": PromptTemplate(
+                template="""
+                Analyze the provided filename and content to classify the document as either a bill document or a discharge summary document.
+
+                Filename: {filename}
+                Content: {ocr_text}
+
+                Classification criteria:
+                - Bill documents: 
+                  * Filename indicators: "bill", "invoice", "charge", "payment", "receipt"
+                  * Content indicators: amounts, hospital charges, GST numbers, bill numbers, payment details, "Total Amount", "Final Bill", "Payable"
+                - Discharge summaries:
+                  * Filename indicators: "discharge", "summary", "medical", "report", "notes"
+                  * Content indicators: diagnosis, admission/discharge dates, treatment details, medical procedures, "Patient Name", "Admitted on", "Discharged On", "Diagnosis"
+
+                IMPORTANT CLASSIFICATION RULES:
+                1. If the document contains BOTH bill information AND discharge information, classify based on PRIMARY content:
+                   - If it has patient details, admission/discharge dates, medical department, treating doctor → classify as "discharge_summary"
+                   - If it has amounts, bill numbers, payable amounts, GST details → classify as "bill"
+                2. "INPATIENT SUMMARY RUNNING BILL" with patient details and medical info should be "discharge_summary"
+                3. Look for medical context: department names, doctor names, admission/discharge dates
+                4. If document has patient name, admission date, discharge date, department → it's likely a "discharge_summary"
+
+                Return ONLY a JSON object in this exact format:
+                {{
+                  "type": "bill|discharge_summary",
+                  "confidence": 0.95,
+                  "reasoning": "Brief explanation based on filename and content analysis"
+                }}
+
+                Do not include any other text, explanations, or acknowledgments. Return only the JSON object.
+                """,
+                required_vars=["ocr_text", "filename"],
+                description="Classify document type based on filename and OCR text",
+            ),
             # Document Extraction Prompts
             "extract_bill_fields": PromptTemplate(
                 template="""
@@ -95,6 +130,53 @@ class PromptManager:
                 required_vars=["ocr_text"],
                 description="Extract bill fields from OCR text",
             ),
+            "extract_bill_fields_enhanced": PromptTemplate(
+                template="""
+                Extract bill information from the provided text. Look for and extract these fields with specific patterns:
+
+                Look for these specific patterns:
+                - Hospital names: "FORTIS HOSPITALS LIMITED", "Max Super Specialty Hospital", "SIR GANGA RAM HOSPITAL", look for hospital names, GST numbers, or infer from context
+                - GST numbers: "GSTIN:", "GST No.", "GST Number"
+                - Amounts: Look for large numbers that could be bill amounts, "Total Amount", "Final Bill", "Payable Amount"
+                - Dates: Look for dates in various formats and convert to YYYY-MM-DD, "Bill Date", "Date of Service"
+                - Patient names: "Patient Name:", "Name:", "Patient:"
+                - Bill numbers: "Bill No.", "Invoice No.", "Reference No."
+
+                Extract these fields:
+                - hospital_name: Name of the hospital (look for hospital names, GST numbers, or infer from context)
+                - total_amount: Total amount as a number (look for amounts, bill numbers, or any large numbers)
+                - date_of_service: Date in YYYY-MM-DD format (look for dates, bill dates, service dates)
+                - patient_name: Name of the patient if available (look for "Patient Name:" patterns)
+                - bill_number: Unique bill identifier (look for "Bill No.", "Invoice No.")
+                - gst_number: GST registration number (look for "GSTIN:", "GST No.")
+
+                OCR Text:
+                {ocr_text}
+
+                Return ONLY a JSON object in this exact format:
+                {{
+                  "type": "bill",
+                  "hospital_name": "Hospital Name",
+                  "total_amount": 12500.00,
+                  "date_of_service": "2024-04-10",
+                  "patient_name": "Patient Name",
+                  "bill_number": "BILL-001",
+                  "gst_number": "27ABCDE1234F1Z5"
+                }}
+
+                Use null for missing fields. If you can't find a value, use these defaults:
+                - hospital_name: "Unknown Hospital" if not found
+                - total_amount: 0.0 if not found  
+                - date_of_service: "2024-01-01" if not found
+                - patient_name: "Unknown Patient" if not found
+                - bill_number: null if not found
+                - gst_number: null if not found
+
+                Return only the JSON object.
+                """,
+                required_vars=["ocr_text"],
+                description="Extract bill fields with enhanced patterns from OCR text",
+            ),
             "extract_discharge_fields": PromptTemplate(
                 template="""
                 Extract patient information from this discharge summary. Return ONLY a JSON object with these fields:
@@ -123,6 +205,56 @@ class PromptManager:
                 """,
                 required_vars=["ocr_text"],
                 description="Extract discharge summary fields from OCR text",
+            ),
+            "extract_discharge_fields_enhanced": PromptTemplate(
+                template="""
+                Extract discharge summary information from the provided text. Look for and extract these fields with specific patterns:
+
+                Look for these specific patterns:
+                - Patient names: "Patient Name:", "Name:", "Patient:"
+                - Medical conditions: Look for medical terms, diagnoses, or procedures, "Diagnosis:", "Condition:"
+                - Dates: "Date of Admission", "Date Of Discharge", "Admitted on", "Discharged On", "Admission Date", "Discharge Date"
+                - Hospital names: Look for hospital names, GST numbers, or department information
+                - Treatment: "Treatment Given", "Procedure", "Operation", "Medical Procedure"
+                - Status: "Final Status", "Condition at Discharge", "Patient Status"
+
+                Extract these fields:
+                - hospital_name: Name of the hospital or medical facility (look for hospital names, GST numbers)
+                - patient_name: Name of the patient (look for "Patient Name:" patterns)
+                - admission_date: Admission date in YYYY-MM-DD format (look for "Admitted on", "Admission Date")
+                - discharge_date: Discharge date in YYYY-MM-DD format (look for "Discharged On", "Discharge Date")
+                - diagnosis: Primary diagnosis or medical condition (look for medical terms, conditions, procedures)
+                - treatment_given: Treatment provided during hospitalization (look for "Treatment Given", "Procedure")
+                - final_status: Patient's condition at discharge (look for "Final Status", "Condition at Discharge")
+
+                OCR Text:
+                {ocr_text}
+
+                Return ONLY a JSON object in this exact format:
+                {{
+                  "type": "discharge_summary",
+                  "hospital_name": "Hospital Name",
+                  "patient_name": "Patient Name",
+                  "admission_date": "2024-04-01",
+                  "discharge_date": "2024-04-10",
+                  "diagnosis": "Primary diagnosis",
+                  "treatment_given": "Treatment provided",
+                  "final_status": "Patient status"
+                }}
+
+                If you can't find a value, use these defaults:
+                - hospital_name: "Unknown Hospital" if not found
+                - patient_name: "Unknown Patient" if not found
+                - admission_date: "2024-01-01" if not found
+                - discharge_date: "2024-01-01" if not found
+                - diagnosis: "Unknown Diagnosis" if not found
+                - treatment_given: "Unknown Treatment" if not found
+                - final_status: "Unknown Status" if not found
+
+                Return only the JSON object.
+                """,
+                required_vars=["ocr_text"],
+                description="Extract discharge summary fields with enhanced patterns from OCR text",
             ),
             # Multi-Document Extraction Prompt
             "extract_multiple_documents": PromptTemplate(

@@ -69,10 +69,10 @@ class ClaimProcessor:
 
         try:
             # Step 1: Validate and process files
-            ocr_texts = await self._process_files(files, filenames)
+            ocr_results = await self._process_files(files, filenames)
 
             # Step 2: Extract documents using GenAI
-            genai_results = await self._extract_documents(ocr_texts, user_id)
+            genai_results = await self._extract_documents(ocr_results, user_id)
 
             # Step 3: Validate and make decisions using ADK
             adk_results = await self._validate_and_decide(genai_results, user_id)
@@ -87,9 +87,9 @@ class ClaimProcessor:
             logger.error(f"Claim processing failed for user {user_id}: {e}")
             raise ProcessingError(f"Failed to process claim documents: {e}") from e
 
-    async def _process_files(self, files: List[bytes], filenames: List[str]) -> List[str]:
+    async def _process_files(self, files: List[bytes], filenames: List[str]) -> List[Dict[str, str]]:
         """Validate files and extract OCR text."""
-        ocr_texts = []
+        ocr_results = []
 
         for file_content, filename in zip(files, filenames):
             # Validate file
@@ -97,17 +97,17 @@ class ClaimProcessor:
 
             # Extract OCR text
             ocr_text = await process_ocr(file_content, filename)
-            ocr_texts.append(ocr_text)
+            ocr_results.append({"text": ocr_text, "filename": filename})
 
-        logger.info(f"Processed {len(ocr_texts)} files with OCR")
-        return ocr_texts
+        logger.info(f"Processed {len(ocr_results)} files with OCR")
+        return ocr_results
 
-    async def _extract_documents(self, ocr_texts: List[str], user_id: str) -> List[Dict]:
+    async def _extract_documents(self, ocr_results: List[Dict[str, str]], user_id: str) -> List[Dict]:
         """Extract documents using GenAI pipeline."""
         logger.info("Starting document extraction with GenAI")
 
         try:
-            genai_results = await run_genai_pipeline(ocr_texts, user_id=user_id)
+            genai_results = await run_genai_pipeline(ocr_results, user_id=user_id)
             logger.info(f"GenAI extracted {len(genai_results)} document results")
             return genai_results
         except Exception as e:

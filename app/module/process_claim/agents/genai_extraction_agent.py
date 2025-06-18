@@ -16,11 +16,12 @@ genai.configure(api_key=Config.GOOGLE_API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 
-async def classify_document(ocr_text: str) -> dict:
-    """Classify the document type based on OCR text."""
-    prompt = prompt_manager.get_prompt("classify_document", ocr_text=ocr_text)
+async def classify_document(ocr_text: str, filename: str = "") -> dict:
+    """Classify the document type based on OCR text and filename."""
+    # Use the prompt manager with both filename and content
+    classification_prompt = prompt_manager.get_prompt("classify_document_with_filename", ocr_text=ocr_text, filename=filename)
 
-    response = model.generate_content(prompt)
+    response = model.generate_content(classification_prompt)
     try:
         cleaned_response = clean_json_response(response.text)
         result = json.loads(cleaned_response)
@@ -29,15 +30,15 @@ async def classify_document(ocr_text: str) -> dict:
         return result
     except json.JSONDecodeError:
         logger.error(f"Failed to parse classification response: {response.text}")
-        return {"type": "unknown"}
+        return {"type": "unknown", "confidence": 0, "reasoning": "Failed to parse classification response"}
 
 
 async def extract_fields(ocr_text: str, doc_type: str) -> dict:
     """Extract relevant fields based on document type."""
     if doc_type == "bill":
-        prompt = prompt_manager.get_prompt("extract_bill_fields", ocr_text=ocr_text)
+        prompt = prompt_manager.get_prompt("extract_bill_fields_enhanced", ocr_text=ocr_text)
     elif doc_type == "discharge_summary":
-        prompt = prompt_manager.get_prompt("extract_discharge_fields", ocr_text=ocr_text)
+        prompt = prompt_manager.get_prompt("extract_discharge_fields_enhanced", ocr_text=ocr_text)
     else:
         return {"type": "unknown"}
 
@@ -53,21 +54,57 @@ async def extract_fields(ocr_text: str, doc_type: str) -> dict:
         return {"type": doc_type}
 
 
-async def run_claim_processing_pipeline(ocr_texts: list, user_id: str = None):
+async def run_claim_processing_pipeline(ocr_results: list, user_id: str = None):
     """Run the complete claim processing pipeline."""
     user_id = user_id or str(uuid.uuid4())
     final_results = []
 
     try:
-        for i, ocr_text in enumerate(ocr_texts):
+        for i, ocr_result in enumerate(ocr_results):
             logger.info(f"=== GenAI Pipeline Processing Document {i + 1} ===")
 
-            # Step 1: Extract multiple documents from OCR
-            extracted_documents = await extract_multiple_documents_from_ocr(ocr_text)
+            # Extract text and filename from the result
+            if isinstance(ocr_result, dict):
+                ocr_text = ocr_result.get("text", "")
+                filename = ocr_result.get("filename", "")
+            else:
+                # Backward compatibility: if it's just a string, treat it as OCR text
+                ocr_text = ocr_result
+                filename = ""
+
+            # Step 1: Classify the document first
+            logger.info("Step 1: Document Classification")
+            classification_result = await classify_document(ocr_text, filename)
+            doc_type = classification_result.get("type", "unknown")
+            confidence = classification_result.get("confidence", 0)
+            reasoning = classification_result.get("reasoning", "")
+
+            logger.info(f"Document {filename} classified as: {doc_type} (confidence: {confidence}, reasoning: {reasoning})")
+
+            # Step 2: Extract documents based on classification
+            logger.info("Step 2: Document Extraction")
+            if doc_type == "bill":
+                # Extract bill-specific fields
+                extracted_doc = await extract_fields(ocr_text, "bill")
+                extracted_doc["type"] = "bill"  # Ensure type is set
+                extracted_documents = [extracted_doc]
+            elif doc_type == "discharge_summary":
+                # Extract discharge-specific fields
+                extracted_doc = await extract_fields(ocr_text, "discharge_summary")
+                extracted_doc["type"] = "discharge_summary"  # Ensure type is set
+                extracted_documents = [extracted_doc]
+            else:
+                # Fallback to multi-document extraction for unknown types
+                logger.info("Unknown document type, falling back to multi-document extraction")
+                extracted_documents = await extract_multiple_documents_from_ocr(ocr_text)
+
             logger.info(f"GenAI Extracted {len(extracted_documents)} documents")
 
-            # Step 2: Process each extracted document (extraction only, no validation)
+            # Step 3: Process each extracted document (extraction only, no validation)
             for j, doc in enumerate(extracted_documents):
+                # Add classification info to the document
+                doc["classification"] = {"type": doc_type, "confidence": confidence, "reasoning": reasoning}
+
                 # GenAI only extracts, ADK handles validation and decisions
                 validation_result = {"missing_documents": [], "discrepancies": []}  # Empty validation from GenAI
                 claim_decision = {"status": "pending", "reason": "Decision pending ADK processing"}
