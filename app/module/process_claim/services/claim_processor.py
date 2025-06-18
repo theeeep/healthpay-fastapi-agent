@@ -5,6 +5,7 @@ This service orchestrates the entire claim processing workflow in a clean, modul
 
 import uuid
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Dict, List, Optional
 
 from app.core.logger import logger
@@ -29,6 +30,67 @@ class ProcessingResult:
     validation: ValidationResult
     claim_decision: ClaimDecision
     processing_metadata: Dict
+
+
+def validate_date(date_str: Optional[str], field_name: str) -> tuple[bool, Optional[str]]:
+    """
+    Validate if a date is not in the future.
+
+    Args:
+        date_str: Date string in YYYY-MM-DD format
+        field_name: Name of the field being validated
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not date_str:
+        return True, None  # Null dates are handled by other validation
+
+    try:
+        # Parse the date string
+        parsed_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        today = date.today()
+
+        # Check if date is in the future
+        if parsed_date > today:
+            return False, f"Future date detected: {field_name} = {date_str}"
+
+        return True, None
+    except ValueError:
+        return False, f"Invalid date format for {field_name}: {date_str}"
+
+
+def validate_dates_in_document(doc: Dict) -> List[str]:
+    """
+    Validate all dates in a document.
+
+    Args:
+        doc: Document dictionary with date fields
+
+    Returns:
+        List of validation error messages
+    """
+    errors = []
+
+    # Check date_of_service for bill documents
+    if doc.get("type") == "bill":
+        is_valid, error = validate_date(doc.get("date_of_service"), "date_of_service")
+        if not is_valid and error:
+            errors.append(error)
+
+    # Check admission and discharge dates for discharge summary
+    elif doc.get("type") == "discharge_summary":
+        # Check admission date
+        is_valid, error = validate_date(doc.get("admission_date"), "admission_date")
+        if not is_valid and error:
+            errors.append(error)
+
+        # Check discharge date
+        is_valid, error = validate_date(doc.get("discharge_date"), "discharge_date")
+        if not is_valid and error:
+            errors.append(error)
+
+    return errors
 
 
 class ClaimProcessor:
@@ -122,10 +184,37 @@ class ClaimProcessor:
             # Extract documents for ADK processing
             extracted_documents = self._extract_documents_for_adk(genai_results)
 
-            # Run ADK pipeline
+            # Validate dates before ADK processing
+            date_errors = []
+            for doc in extracted_documents:
+                doc_errors = validate_dates_in_document(doc)
+                date_errors.extend(doc_errors)
+
+            # If we found future dates, reject immediately
+            if date_errors:
+                logger.warning(f"Found future dates in documents: {date_errors}")
+                return [
+                    {
+                        "validation_result": {
+                            "missing_documents": [],
+                            "discrepancies": date_errors,
+                            "data_quality_score": 0,
+                            "recommendations": ["Correct all future dates to valid past or present dates"],
+                        },
+                        "claim_decision": {
+                            "status": "rejected",
+                            "reason": "Claim contains future date(s), which is not allowed for real claims",
+                            "confidence_score": 0,
+                            "required_actions": ["Correct all future dates to valid past or present dates"],
+                        },
+                    }
+                ]
+
+            # If dates are valid, proceed with ADK pipeline
             adk_results = await run_adk_pipeline(extracted_documents, user_id=user_id)
             logger.info(f"ADK processed {len(adk_results)} results")
             return adk_results
+
         except Exception as e:
             logger.error(f"ADK processing failed: {e}")
             raise ProcessingError(f"Validation and decision making failed: {e}") from e

@@ -112,7 +112,7 @@ class PromptManager:
                 - patient_name: Name of the patient if available (look for "Patient Name:", "Name:")
 
                 Look for these specific patterns:
-                - Hospital names: "FORTIS HOSPITALS LIMITED", "Max Super Specialty Hospital", "SIR GANGA RAM HOSPITAL"
+                - Hospital names: Look for hospital names in headers, footers, or letterheads
                 - GST numbers: "GSTIN:", "GST No."
                 - Amounts: Look for large numbers that could be bill amounts
                 - Dates: Look for dates in various formats and convert to YYYY-MM-DD
@@ -124,7 +124,7 @@ class PromptManager:
                 Return ONLY JSON with extracted values. If you can't find a value, use defaults:
                 - hospital_name: "Unknown Hospital" if not found
                 - total_amount: 0.0 if not found  
-                - date_of_service: "2024-01-01" if not found
+                - date_of_service: null if not found (do not use default date)
                 - patient_name: "Unknown Patient" if not found
                 """,
                 required_vars=["ocr_text"],
@@ -135,7 +135,7 @@ class PromptManager:
                 Extract bill information from the provided text. Look for and extract these fields with specific patterns:
 
                 Look for these specific patterns:
-                - Hospital names: "FORTIS HOSPITALS LIMITED", "Max Super Specialty Hospital", "SIR GANGA RAM HOSPITAL", look for hospital names, GST numbers, or infer from context
+                - Hospital names: Look for hospital names in headers, footers, or letterheads
                 - GST numbers: "GSTIN:", "GST No.", "GST Number"
                 - Amounts: Look for large numbers that could be bill amounts, "Total Amount", "Final Bill", "Payable Amount"
                 - Dates: Look for dates in various formats and convert to YYYY-MM-DD, "Bill Date", "Date of Service"
@@ -157,17 +157,17 @@ class PromptManager:
                 {{
                   "type": "bill",
                   "hospital_name": "Hospital Name",
-                  "total_amount": 12500.00,
-                  "date_of_service": "2024-04-10",
+                  "total_amount": 0.0,
+                  "date_of_service": null,
                   "patient_name": "Patient Name",
-                  "bill_number": "BILL-001",
-                  "gst_number": "27ABCDE1234F1Z5"
+                  "bill_number": null,
+                  "gst_number": null
                 }}
 
                 Use null for missing fields. If you can't find a value, use these defaults:
                 - hospital_name: "Unknown Hospital" if not found
                 - total_amount: 0.0 if not found  
-                - date_of_service: "2024-01-01" if not found
+                - date_of_service: null if not found (do not use default date)
                 - patient_name: "Unknown Patient" if not found
                 - bill_number: null if not found
                 - gst_number: null if not found
@@ -191,7 +191,7 @@ class PromptManager:
                 - Patient names: "Patient Name:", "Name:"
                 - Medical conditions: Look for medical terms, diagnoses, or procedures
                 - Dates: "Date of Admission", "Date Of Discharge", "Admitted on", "Discharged On"
-                - Hospital names: Look for hospital names, GST numbers, or department information
+                - Hospital names: Look for hospital names in headers, footers, or letterheads
 
                 OCR Text:
                 {ocr_text}
@@ -199,8 +199,8 @@ class PromptManager:
                 Return ONLY JSON with extracted values. If you can't find a value, use defaults:
                 - patient_name: "Unknown Patient" if not found
                 - diagnosis: "Unknown Diagnosis" if not found
-                - admission_date: "2024-01-01" if not found
-                - discharge_date: "2024-01-01" if not found
+                - admission_date: null if not found (do not use default date)
+                - discharge_date: null if not found (do not use default date)
                 - hospital_name: "Unknown Hospital" if not found
                 """,
                 required_vars=["ocr_text"],
@@ -214,7 +214,7 @@ class PromptManager:
                 - Patient names: "Patient Name:", "Name:", "Patient:"
                 - Medical conditions: Look for medical terms, diagnoses, or procedures, "Diagnosis:", "Condition:"
                 - Dates: "Date of Admission", "Date Of Discharge", "Admitted on", "Discharged On", "Admission Date", "Discharge Date"
-                - Hospital names: Look for hospital names, GST numbers, or department information
+                - Hospital names: Look for hospital names in headers, footers, or letterheads
                 - Treatment: "Treatment Given", "Procedure", "Operation", "Medical Procedure"
                 - Status: "Final Status", "Condition at Discharge", "Patient Status"
 
@@ -235,8 +235,8 @@ class PromptManager:
                   "type": "discharge_summary",
                   "hospital_name": "Hospital Name",
                   "patient_name": "Patient Name",
-                  "admission_date": "2024-04-01",
-                  "discharge_date": "2024-04-10",
+                  "admission_date": null,
+                  "discharge_date": null,
                   "diagnosis": "Primary diagnosis",
                   "treatment_given": "Treatment provided",
                   "final_status": "Patient status"
@@ -245,8 +245,8 @@ class PromptManager:
                 If you can't find a value, use these defaults:
                 - hospital_name: "Unknown Hospital" if not found
                 - patient_name: "Unknown Patient" if not found
-                - admission_date: "2024-01-01" if not found
-                - discharge_date: "2024-01-01" if not found
+                - admission_date: null if not found (do not use default date)
+                - discharge_date: null if not found (do not use default date)
                 - diagnosis: "Unknown Diagnosis" if not found
                 - treatment_given: "Unknown Treatment" if not found
                 - final_status: "Unknown Status" if not found
@@ -277,7 +277,7 @@ class PromptManager:
                 
                 Look for these patterns:
                 - Patient names: "Patient Name:", "Name:"
-                - Hospital names: Look for hospital names, GST numbers
+                - Hospital names: Look for hospital names in headers, footers, or letterheads
                 - Dates: "Admitted on", "Discharged On", "Date:", "Bill Date"
                 - Amounts: Look for TOTAL bill amounts, not individual line items
                 - Medical info: Department names, doctor names, diagnoses
@@ -294,8 +294,8 @@ class PromptManager:
                 {{
                   "type": "bill",
                   "hospital_name": "Hospital Name",
-                  "total_amount": 12345.67,  // Use TOTAL amount, not individual amounts
-                  "date_of_service": "2025-02-11",
+                  "total_amount": 0.0,
+                  "date_of_service": null,
                   "patient_name": "Patient Name"
                 }}
                 
@@ -304,8 +304,8 @@ class PromptManager:
                   "type": "discharge_summary", 
                   "patient_name": "Patient Name",
                   "diagnosis": "Medical Diagnosis",
-                  "admission_date": "2025-02-07",
-                  "discharge_date": "2025-02-11",
+                  "admission_date": null,
+                  "discharge_date": null,
                   "hospital_name": "Hospital Name"
                 }}
                 
@@ -319,8 +319,8 @@ class PromptManager:
                 7. A single PDF can and should return BOTH document types if both types of information are present
                 
                 EXAMPLES:
-                - If you see "Patient Name: Mrs. Mary Philo", "Admission Date: 2025-02-07", "Discharge Date: 2025-02-11", "Diagnosis: LEFT KNEE INFECTED OSTEOARTHRITIS" → Create discharge_summary
-                - If you see "FORTIS HOSPITALS LIMITED", "Total Amount: 435639.15", "Bill Date: 2025-02-11" → Create bill
+                - If you see "Patient Name: John Doe", "Admission Date: 2024-01-15", "Discharge Date: 2024-01-20", "Diagnosis: ACUTE APPENDICITIS" → Create discharge_summary
+                - If you see "Hospital Name", "Total Amount: 50000.00", "Bill Date: 2024-01-20" → Create bill
                 - If you see BOTH types of information → Create BOTH documents
                 
                 IMPORTANT: Return ONLY the JSON array, nothing else.
@@ -344,15 +344,15 @@ class PromptManager:
                         {{
                             "type": "bill",
                             "hospital_name": "Hospital Name",
-                            "total_amount": 12345.67,
-                            "date_of_service": "2025-02-11"
+                            "total_amount": 50000.00,
+                            "date_of_service": "2024-01-20"
                         }},
                         {{
                             "type": "discharge_summary",
                             "patient_name": "Patient Name",
                             "diagnosis": "Medical Diagnosis",
-                            "admission_date": "2025-02-07",
-                            "discharge_date": "2025-02-11"
+                            "admission_date": "2024-01-15",
+                            "discharge_date": "2024-01-20"
                         }}
                     ],
                     "document_count": 2,
@@ -364,12 +364,14 @@ class PromptManager:
                 - Bill document: hospital_name (not "Unknown Hospital"), total_amount > 0, valid date_of_service
                 - Discharge summary: patient_name (not "Unknown Patient"), diagnosis (not "Unknown Diagnosis"), valid dates
                 - Data consistency between documents (same patient, hospital, dates)
+                - CRITICAL: Any date in the future (after today) is invalid and must be flagged as a discrepancy
                 
                 Medical claim specific checks:
                 - Verify hospital name matches known healthcare providers
                 - Check if amounts are reasonable for the type of service
-                - Validate date ranges are logical
+                - Validate date ranges are logical (admission before discharge, service date within admission/discharge range)
                 - Ensure patient information is complete and consistent
+                - CRITICAL: Check all dates (date_of_service, admission_date, discharge_date). If any date is in the future (after today), add a discrepancy: "Future date detected: <field> = <value>" and add a recommendation: "Correct all future dates to valid past or present dates."
                 
                 Return format: {{
                     "missing_documents": ["list of missing document types"],
@@ -382,6 +384,7 @@ class PromptManager:
                 - {{"missing_documents": [], "discrepancies": [], "data_quality_score": 95, "recommendations": ["Data quality is excellent"]}}
                 - {{"missing_documents": ["discharge_summary"], "discrepancies": [], "data_quality_score": 85, "recommendations": ["Submit discharge summary"]}}
                 - {{"missing_documents": ["bill"], "discrepancies": [], "data_quality_score": 75, "recommendations": ["Submit bill document"]}}
+                - {{"missing_documents": [], "discrepancies": ["Future date detected: date_of_service = 2025-01-01"], "data_quality_score": 50, "recommendations": ["Correct all future dates to valid past or present dates"]}}
                 
                 IMPORTANT: Return ONLY the JSON object, no other text.
                 """,
@@ -412,7 +415,8 @@ class PromptManager:
                 - Hospital must be identifiable and legitimate
                 - Amounts must be reasonable for medical procedures
                 - Patient information must be complete and consistent
-                - Dates must be logical and not in the future
+                - CRITICAL: Any date in the future (after today) must result in REJECTION
+                - CRITICAL: If any discrepancy indicates a future date in any field (date_of_service, admission_date, discharge_date), REJECT the claim. Use this reason: "Claim contains future date(s), which is not allowed for real claims."
                 
                 Return format: {{
                     "status": "approved" or "conditional_approval" or "rejected",
@@ -430,6 +434,8 @@ class PromptManager:
                    "confidence_score": 75, "required_actions": ["Verify admission/discharge dates"]}}
                 - {{"status": "rejected", "reason": "Missing discharge summary document", 
                    "confidence_score": 30, "required_actions": ["Submit complete discharge summary"]}}
+                - {{"status": "rejected", "reason": "Claim contains future date(s), which is not allowed for real claims.", 
+                   "confidence_score": 10, "required_actions": ["Correct all future dates to valid past or present dates"]}}
                 
                 IMPORTANT: Return ONLY the JSON object, no other text.
                 """,
