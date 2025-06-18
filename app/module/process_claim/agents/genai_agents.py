@@ -155,58 +155,6 @@ async def extract_fields(ocr_text: str, doc_type: str) -> dict:
         return {"type": doc_type}
 
 
-async def validate_data(extracted_data: dict) -> dict:
-    """Validate the extracted data for completeness based on document type."""
-    doc_type = extracted_data.get("type", "unknown")
-
-    prompt = f"""
-    Validate this extracted data for completeness and consistency based on document type.
-    
-    Document Type: {doc_type}
-    Extracted Data:
-    {json.dumps(extracted_data, indent=2)}
-    
-    Validation rules by document type:
-    
-    For BILL documents:
-    - hospital_name: Must be present and not "Unknown Hospital"
-    - total_amount: Must be greater than 0
-    - date_of_service: Must be a valid date
-    - diagnosis: NOT required for bills (bills don't contain diagnosis)
-    
-    For DISCHARGE SUMMARY documents:
-    - patient_name: Must be present and not "Unknown Patient"
-    - diagnosis: Must be present and not "Unknown Diagnosis"
-    - admission_date: Must be a valid date
-    - discharge_date: Must be a valid date after admission_date
-    - hospital_name: NOT required for discharge summaries
-    
-    Return ONLY a JSON object with:
-    - missing_documents: List of missing required documents
-    - discrepancies: List of any data inconsistencies or issues specific to the document type
-
-    Return ONLY JSON like: {{"missing_documents": [], "discrepancies": []}}
-    """
-
-    response = model.generate_content(prompt)
-    try:
-        cleaned_response = clean_json_response(response.text)
-        logger.info(f"Validation raw response: {response.text}")
-        logger.info(f"Validation cleaned response: {cleaned_response}")
-        return json.loads(cleaned_response)
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse validation response: {response.text}")
-        logger.error(f"Validation cleaned response: {cleaned_response}")
-        logger.error(f"Validation JSON decode error: {e}")
-        return {"missing_documents": [], "discrepancies": ["Failed to validate data"]}
-
-
-async def make_claim_decision(validation_result: dict) -> dict:
-    """Make a claim decision based on validation results."""
-    # Remove this function - ADK will handle claim decisions
-    return {"status": "pending", "reason": "Decision pending ADK processing"}
-
-
 async def run_claim_processing_pipeline(ocr_texts: list, user_id: str = None):
     """Run the complete claim processing pipeline."""
     user_id = user_id or str(uuid.uuid4())
@@ -222,15 +170,12 @@ async def run_claim_processing_pipeline(ocr_texts: list, user_id: str = None):
             extracted_documents = await extract_multiple_documents_from_ocr(ocr_text)
             logger.info(f"GenAI Extracted {len(extracted_documents)} documents: {extracted_documents}")
 
-            # Step 2: Process each extracted document
+            # Step 2: Process each extracted document (extraction only, no validation)
             for j, doc in enumerate(extracted_documents):
                 logger.info(f"Processing extracted document {j + 1}/{len(extracted_documents)}: {doc.get('type', 'unknown')}")
 
-                # Validate the document data (document-type aware)
-                validation_result = await validate_data(doc)
-                logger.info(f"GenAI Validation result for {doc.get('type')}: {validation_result}")
-
-                # Don't make claim decisions here - ADK will handle that
+                # GenAI only extracts, ADK handles validation and decisions
+                validation_result = {"missing_documents": [], "discrepancies": []}  # Empty validation from GenAI
                 claim_decision = {"status": "pending", "reason": "Decision pending ADK processing"}
 
                 # Combine results for this document

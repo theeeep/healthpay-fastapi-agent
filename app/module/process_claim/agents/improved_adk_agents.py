@@ -126,8 +126,10 @@ decision_agent = LlmAgent(
         "required_actions": ["list of actions needed if conditional approval"]
     }
     
+    IMPORTANT: For APPROVED claims, use exactly this reason: "All required documents present and data is consistent"
+    
     Examples:
-    - {"status": "approved", "reason": "Complete claim package with high data quality and all required documents present", "confidence_score": 95, "required_actions": []}
+    - {"status": "approved", "reason": "All required documents present and data is consistent", "confidence_score": 95, "required_actions": []}
     - {"status": "conditional_approval", "reason": "Good data but minor discrepancies in dates", "confidence_score": 75, "required_actions": ["Verify admission/discharge dates"]}
     - {"status": "rejected", "reason": "Missing discharge summary document", "confidence_score": 30, "required_actions": ["Submit complete discharge summary"]}
     
