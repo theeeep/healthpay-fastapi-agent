@@ -43,17 +43,20 @@ classification_agent = LlmAgent(
     
     Look for these specific keywords to classify:
     
-    BILL indicators:
+    BILL indicators (ANY of these indicate a bill):
     - "bill", "invoice", "interim bill", "final bill", "bill of supply"
     - "GSTIN", "GST", "tax", "amount", "total", "payment"
     - "bill to", "amount due", "total amount", "final amount"
     - "hospital bill", "medical bill", "patient bill"
+    - "Interim Bill", "Bill Of Supply", "GSTIN:"
     
-    DISCHARGE SUMMARY indicators:
+    DISCHARGE SUMMARY indicators (ALL of these should be present):
     - "discharge", "admission", "discharge summary", "medical summary"
     - "patient report", "clinical notes", "medical record"
     - "diagnosis", "treatment", "medication", "prescription"
     - "admission date", "discharge date", "length of stay"
+    
+    IMPORTANT: If you see "Interim Bill", "Bill Of Supply", "GSTIN:", or "Bill To" in the text, it's ALWAYS a bill.
     
     Return format: {"type": "bill"} or {"type": "discharge_summary"}
     
@@ -68,56 +71,87 @@ extraction_agent = LlmAgent(
     model="gemini-2.0-flash-exp",
     description="Extracts structured data from medical documents",
     instruction="""
-    You are a data extraction agent. Extract structured information from medical documents.
+    You are a data extraction agent. Extract structured information from medical documents based on document type.
     
     CRITICAL: You must return ONLY valid JSON. Do not include any markdown formatting, explanations, or additional text.
     
     First, determine the document type by analyzing the OCR text. Look for keywords:
-    - BILL indicators: "bill", "invoice", "amount", "total", "payment", "hospital bill", "medical bill"
+    - BILL indicators: "bill", "invoice", "amount", "total", "payment", "hospital bill", "medical bill", "Interim Bill", "Bill Of Supply", "GSTIN"
     - DISCHARGE SUMMARY indicators: "discharge", "admission", "patient", "diagnosis", "medical report", "summary"
     
-    Then extract fields based on the determined document type.
+    Then extract ONLY the relevant fields based on the document type:
     
-    For BILL documents, extract:
-    - type: "bill" (always set this)
+    FOR BILL DOCUMENTS (type: "bill"), extract ONLY:
+    - type: "bill"
     - hospital_name: Extract the name of the hospital, clinic, or medical facility
     - total_amount: Extract the total bill amount as a number (float)
     - date_of_service: Extract the date of service in YYYY-MM-DD format
     
-    For DISCHARGE SUMMARY documents, extract:
-    - type: "discharge_summary" (always set this)
+    FOR DISCHARGE SUMMARY DOCUMENTS (type: "discharge_summary"), extract ONLY:
+    - type: "discharge_summary"
     - patient_name: Extract the patient's full name
     - diagnosis: Extract the medical diagnosis, condition, or reason for admission
     - admission_date: Extract the admission date in YYYY-MM-DD format
     - discharge_date: Extract the discharge date in YYYY-MM-DD format
     
-    Look for patterns like:
-    - Hospital names: "Apollo Hospitals", "City Medical Center", "Max Healthcare", "Hospital Name:", "Medical Center:", etc.
-    - Amounts: "Total: $1234.56", "Amount Due: 500.00", "Bill Amount: 1000", "Total Amount:", "Final Amount:", etc.
-    - Dates: "Date: 2024-01-15", "Service Date: 2024/01/15", "Bill Date: 2024-01-15", "Date of Service:", etc.
-    - Patient names: "Patient: John Doe", "Name: Jane Smith", "P a t i e n t N a m e : Mrs. NANDI RAWAT", "Patient Name:", "Name:", etc.
-    - Diagnosis: "Diagnosis: Acute appendicitis", "Condition: Heart failure", "Medical Condition: Diabetes", "Diagnosis:", "Medical Condition:", etc.
+    Look for these SPECIFIC patterns in the OCR text:
     
-    For the specific OCR text provided, look for:
-    - Patient name: "Name: Mr. KOSGI VISHNUVARDHAN" or similar patterns
-    - Hospital name: Look for hospital names, medical centers, or healthcare providers
-    - Amount: Look for "Total", "Amount", "Bill Amount", "Final Amount" followed by numbers
-    - Date: Look for "From Date:", "To Date:", "Date:", "Service Date:" followed by dates
+    FOR BILLS:
+    HOSPITAL NAME patterns:
+    - Look for hospital names like "Apollo Hospitals", "CARE Hospitals", "MAX Healthcare"
+    - Look for medical center names
+    - Look for healthcare provider names
     
-    IMPORTANT: You MUST extract all required fields. If you cannot find a field in the text:
+    AMOUNT patterns:
+    - Look for "Total:", "Amount Due:", "Bill Amount:", "Total Amount:", "Final Amount:"
+    - Look for numbers followed by currency symbols or amounts
+    - Extract the numeric value as a float
+    
+    DATE patterns:
+    - "From Date: 1-Feb-2025 ToDate: 2-Feb-2025" → extract "2025-02-01" or "2025-02-02"
+    - "Date : 02-Feb-2025" → extract "2025-02-02"
+    - "Service Date: 2024/01/15" → extract "2024-01-15"
+    - Convert any date format to YYYY-MM-DD
+    
+    FOR DISCHARGE SUMMARIES:
+    PATIENT NAME patterns:
+    - "Name: Mr. KOSGI VISHNUVARDHAN" → extract "Mr. KOSGI VISHNUVARDHAN"
+    - "Patient: John Doe" → extract "John Doe"
+    - "Name: Jane Smith" → extract "Jane Smith"
+    - Look for "Name:" followed by a person's name
+    
+    DIAGNOSIS patterns:
+    - Look for "Diagnosis:", "Condition:", "Medical Condition:"
+    - Look for medical terms, conditions, or reasons for admission
+    
+    DATE patterns:
+    - "Admit Date: 03/02/2025" → extract "2025-02-03"
+    - "Admission Date: 2024-01-15" → extract "2024-01-15"
+    - "Discharge Date: 2024-01-20" → extract "2024-01-20"
+    - Convert any date format to YYYY-MM-DD
+    
+    IMPORTANT: You MUST extract all required fields for the document type. If you cannot find a field in the text:
+    
+    FOR BILLS:
     - For hospital_name: Use "Unknown Hospital" if no hospital name is found
     - For total_amount: Use 0.0 if no amount is found
     - For date_of_service: Use "2024-01-01" if no date is found
+    
+    FOR DISCHARGE SUMMARIES:
     - For patient_name: Use "Unknown Patient" if no patient name is found
     - For diagnosis: Use "Unknown Diagnosis" if no diagnosis is found
     - For admission_date: Use "2024-01-01" if no admission date is found
     - For discharge_date: Use "2024-01-01" if no discharge date is found
     
-    Return format: {
-        "type": "bill" or "discharge_summary",
+    Return format for BILL: {
+        "type": "bill",
         "hospital_name": "Extracted Hospital Name or Unknown Hospital",
         "total_amount": 1234.56,
-        "date_of_service": "2024-01-15",
+        "date_of_service": "2024-01-15"
+    }
+    
+    Return format for DISCHARGE SUMMARY: {
+        "type": "discharge_summary",
         "patient_name": "Extracted Patient Name or Unknown Patient",
         "diagnosis": "Extracted Diagnosis or Unknown Diagnosis",
         "admission_date": "2024-01-10",
@@ -125,6 +159,7 @@ extraction_agent = LlmAgent(
     }
     
     NEVER return null or empty strings for required fields. Always provide a value.
+    NEVER mix fields from different document types.
     """,
     output_key="extracted_data",
 )
@@ -140,16 +175,44 @@ validation_agent = LlmAgent(
     CRITICAL: You must return ONLY valid JSON. Do not include any markdown formatting, explanations, or additional text.
     
     Check for:
-    1. Missing required fields
-    2. Data inconsistencies
-    3. Invalid formats (dates, amounts, etc.)
+    1. Missing required document types (bill and/or discharge_summary)
+    2. Missing required fields for each document type
+    3. Data inconsistencies (dates, amounts, etc.)
+    4. Invalid formats (dates, amounts, etc.)
+    
+    For BILL documents, check:
+    - hospital_name: Should not be "Unknown Hospital"
+    - total_amount: Should be greater than 0
+    - date_of_service: Should be a valid date
+    
+    For DISCHARGE SUMMARY documents, check:
+    - patient_name: Should not be "Unknown Patient"
+    - diagnosis: Should not be "Unknown Diagnosis"
+    - admission_date: Should be a valid date
+    - discharge_date: Should be a valid date and after admission_date
+    
+    Missing document types to check:
+    - If no bill document is found, add "bill" to missing_documents
+    - If no discharge_summary document is found, add "discharge_summary" to missing_documents
+    
+    Common discrepancies to check:
+    - "Total amount is zero" if total_amount is 0.0
+    - "Hospital name is unknown" if hospital_name is "Unknown Hospital"
+    - "Patient name is unknown" if patient_name is "Unknown Patient"
+    - "Diagnosis is unknown" if diagnosis is "Unknown Diagnosis"
+    - "Invalid date format" if dates are not in YYYY-MM-DD format
+    - "Discharge date is before admission date" if discharge_date < admission_date
+    - "Dates are in the future" if dates are in the future
     
     Return format: {
-        "missing_documents": ["list of missing documents"],
+        "missing_documents": ["list of missing document types"],
         "discrepancies": ["list of data inconsistencies"]
     }
     
-    If no issues found, return empty arrays: {"missing_documents": [], "discrepancies": []}
+    Examples:
+    - {"missing_documents": ["discharge_summary"], "discrepancies": ["Total amount is zero"]}
+    - {"missing_documents": [], "discrepancies": ["Hospital name is unknown", "Patient name is unknown"]}
+    - {"missing_documents": [], "discrepancies": []}
     """,
     output_key="validation_result",
 )
@@ -250,92 +313,88 @@ async def run_claim_processing_pipeline(ocr_texts: List[str], user_id: str = Non
             session = await session_service.get_session(app_name="healthpay_claims", user_id=user_id, session_id=session_id)
             logger.info(f"Session state after pipeline: {session.state}")
 
-            # Structure the result for the router
-            if "error" in pipeline_result:
-                # Handle error case
-                final_results.append(
-                    {
-                        "extracted_fields": {"type": "unknown"},
-                        "validation_result": {"missing_documents": [], "discrepancies": ["Processing failed"]},
-                        "claim_decision": {"status": "rejected", "reason": "Processing failed"},
-                    }
-                )
-            else:
-                # Extract data from the pipeline result and session state
-                extracted_data = pipeline_result.get("extracted_data", {})
-                validation_result = pipeline_result.get("validation_result", {})
-                claim_decision = pipeline_result.get("claim_decision", {})
+            # Extract data from session state
+            extracted_data = {}
+            validation_result = {}
+            claim_decision = {}
 
-                # If no extracted_data in pipeline result, try to get it from session state
-                if not extracted_data:
-                    session_extracted_data = session.state.get("extracted_data", {})
-                    logger.info(f"Extracted data from session state: {session_extracted_data}")
+            # Parse extracted_data from session state
+            session_extracted_data = session.state.get("extracted_data", "")
+            if session_extracted_data:
+                if isinstance(session_extracted_data, str):
+                    try:
+                        cleaned_session_data = clean_json_response(session_extracted_data)
+                        extracted_data = json.loads(cleaned_session_data)
+                        logger.info(f"Parsed session extracted data: {extracted_data}")
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to parse session extracted data: {session_extracted_data}")
+                        extracted_data = {}
+                else:
+                    extracted_data = session_extracted_data
 
-                    # Parse the session state data if it's a string
-                    if isinstance(session_extracted_data, str):
+            # Parse validation_result from session state
+            session_validation = session.state.get("validation_result", "")
+            if session_validation:
+                if isinstance(session_validation, str):
+                    try:
+                        cleaned_validation = clean_json_response(session_validation)
+                        validation_result = json.loads(cleaned_validation)
+                    except json.JSONDecodeError:
+                        validation_result = {"missing_documents": [], "discrepancies": ["Validation failed"]}
+                else:
+                    validation_result = session_validation
+
+            # Parse claim_decision from session state
+            session_decision = session.state.get("claim_decision", "")
+            if session_decision:
+                if isinstance(session_decision, str):
+                    try:
+                        cleaned_decision = clean_json_response(session_decision)
+                        claim_decision = json.loads(cleaned_decision)
+                    except json.JSONDecodeError:
+                        claim_decision = {"status": "rejected", "reason": "Decision processing failed"}
+                else:
+                    claim_decision = session_decision
+
+            # If no extracted_data, create a basic structure
+            if not extracted_data:
+                # Try to get document type from classification agent
+                session_doc_type = session.state.get("document_type", "")
+                doc_type = "unknown"
+                if session_doc_type:
+                    if isinstance(session_doc_type, str):
                         try:
-                            cleaned_session_data = clean_json_response(session_extracted_data)
-                            extracted_data = json.loads(cleaned_session_data)
-                            logger.info(f"Parsed session extracted data: {extracted_data}")
-                        except json.JSONDecodeError:
-                            logger.error(f"Failed to parse session extracted data: {session_extracted_data}")
-                            extracted_data = {}
-                    else:
-                        extracted_data = session_extracted_data
-
-                # If still no extracted_data, try to construct from individual agent outputs
-                if not extracted_data:
-                    document_type = session.state.get("document_type", {})
-                    if isinstance(document_type, str):
-                        try:
-                            cleaned_doc_type = clean_json_response(document_type)
+                            cleaned_doc_type = clean_json_response(session_doc_type)
                             doc_type_data = json.loads(cleaned_doc_type)
                             doc_type = doc_type_data.get("type", "unknown")
                         except json.JSONDecodeError:
                             doc_type = "unknown"
-                    elif isinstance(document_type, dict):
-                        doc_type = document_type.get("type", "unknown")
-                    else:
-                        doc_type = "unknown"
+                    elif isinstance(session_doc_type, dict):
+                        doc_type = session_doc_type.get("type", "unknown")
 
-                    logger.info(f"Document type from session: {doc_type}")
+                logger.info(f"Document type from session: {doc_type}")
 
-                    # Create a basic extracted_data structure
-                    extracted_data = {
-                        "type": doc_type,
-                        "hospital_name": "Unknown Hospital",
-                        "total_amount": 0.0,
-                        "date_of_service": "2024-01-01",
-                        "patient_name": "Unknown Patient",
-                        "diagnosis": "Unknown Diagnosis",
-                        "admission_date": "2024-01-01",
-                        "discharge_date": "2024-01-01",
-                    }
+                # Create a basic extracted_data structure
+                extracted_data = {
+                    "type": doc_type,
+                    "hospital_name": "Unknown Hospital",
+                    "total_amount": 0.0,
+                    "date_of_service": "2024-01-01",
+                    "patient_name": "Unknown Patient",
+                    "diagnosis": "Unknown Diagnosis",
+                    "admission_date": "2024-01-01",
+                    "discharge_date": "2024-01-01",
+                }
 
-                # Parse validation and decision results from session state if needed
-                if not validation_result:
-                    session_validation = session.state.get("validation_result", {})
-                    if isinstance(session_validation, str):
-                        try:
-                            cleaned_validation = clean_json_response(session_validation)
-                            validation_result = json.loads(cleaned_validation)
-                        except json.JSONDecodeError:
-                            validation_result = {"missing_documents": [], "discrepancies": ["Validation failed"]}
-                    else:
-                        validation_result = session_validation
+            # Ensure we have default values for validation and decision
+            if not validation_result:
+                validation_result = {"missing_documents": [], "discrepancies": []}
 
-                if not claim_decision:
-                    session_decision = session.state.get("claim_decision", {})
-                    if isinstance(session_decision, str):
-                        try:
-                            cleaned_decision = clean_json_response(session_decision)
-                            claim_decision = json.loads(cleaned_decision)
-                        except json.JSONDecodeError:
-                            claim_decision = {"status": "rejected", "reason": "Decision processing failed"}
-                    else:
-                        claim_decision = session_decision
+            if not claim_decision:
+                claim_decision = {"status": "rejected", "reason": "Decision processing failed"}
 
-                final_results.append({"extracted_fields": extracted_data, "validation_result": validation_result, "claim_decision": claim_decision})
+            # Structure the result for the router
+            final_results.append({"extracted_fields": extracted_data, "validation_result": validation_result, "claim_decision": claim_decision})
 
     except Exception as e:
         logger.error(f"Error in multi-agent pipeline: {e}")
