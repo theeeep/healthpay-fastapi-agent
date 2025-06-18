@@ -21,8 +21,10 @@ process_claim_router = APIRouter()
 
 @process_claim_router.post("/process-claim", response_model=ProcessClaimResponse)
 async def process_claim_documents(files: List[UploadFile] = File(...)):
+    """Process medical insurance claim documents using AI-driven workflow."""
     ocr_texts = []
 
+    # Validate and process uploaded files
     for file in files:
         if file.content_type != "application/pdf":
             raise HTTPException(
@@ -66,6 +68,11 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
 
         # Add ADK results (enhanced validation/decision) - but only if they provide value
         for adk_result in adk_results:
+            # Ensure adk_result is a dictionary
+            if not isinstance(adk_result, dict):
+                logger.warning(f"ADK result is not a dictionary: {type(adk_result)}, value: {adk_result}")
+                continue
+
             # Only add ADK results if they have enhanced validation or decision making
             validation = adk_result.get("validation_result", {})
             decision = adk_result.get("claim_decision", {})

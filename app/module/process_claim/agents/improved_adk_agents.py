@@ -1,5 +1,4 @@
 import json
-import re
 import uuid
 from typing import Dict, List
 
@@ -10,20 +9,12 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from app.core.logger import logger
+from app.core.utils import clean_json_response, parse_json_safely
 
 dotenv.load_dotenv()
 
 # Configure session service
 session_service = InMemorySessionService()
-
-
-def clean_json_response(response_text: str) -> str:
-    """Clean JSON response that might be wrapped in markdown code blocks."""
-    # Remove markdown code block formatting
-    response_text = re.sub(r"^```json\s*", "", response_text)
-    response_text = re.sub(r"\s*```$", "", response_text)
-    response_text = response_text.strip()
-    return response_text
 
 
 # Step 3: Enhanced Validation Agent (Multi-Agent Orchestration)
@@ -144,32 +135,6 @@ decision_agent = LlmAgent(
 enhanced_processing_pipeline = SequentialAgent(name="EnhancedProcessingPipeline", sub_agents=[validation_agent, decision_agent])
 
 
-async def run_agent_pipeline(agent: LlmAgent, content: types.Content, user_id: str, session_id: str) -> Dict:
-    """Run a single agent and return its response."""
-    runner = Runner(agent=agent, app_name="healthpay_claims", session_service=session_service)
-
-    # Log what the agent is receiving
-    ocr_text = content.parts[0].text if content.parts else ""
-    logger.info(f"Agent {agent.name} receiving input (first 300 chars): {ocr_text[:300]}...")
-
-    async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=content):
-        if event.is_final_response():
-            response_text = event.content.parts[0].text if event.content.parts else ""
-            logger.info(f"Agent {agent.name} raw response: {response_text}")
-
-            try:
-                # Clean and parse JSON response
-                cleaned_response = clean_json_response(response_text)
-                parsed_response = json.loads(cleaned_response)
-                logger.info(f"Agent {agent.name} parsed response: {parsed_response}")
-                return parsed_response
-            except json.JSONDecodeError:
-                logger.error(f"Failed to parse JSON from {agent.name}: {response_text}")
-                return {"error": f"Failed to parse response from {agent.name}"}
-
-    return {"error": f"No response from {agent.name}"}
-
-
 async def run_claim_processing_pipeline(genai_extracted_documents: List[Dict], user_id: str = None) -> List[Dict]:
     """Run the enhanced multi-agent orchestration pipeline for validation and decision making using GenAI extracted data."""
     user_id = user_id or str(uuid.uuid4())
@@ -204,10 +169,18 @@ async def run_claim_processing_pipeline(genai_extracted_documents: List[Dict], u
                 logger.info(f"Enhanced pipeline raw response: {response_text}")
                 try:
                     cleaned_response = clean_json_response(response_text)
-                    pipeline_result = json.loads(cleaned_response)
-                    logger.info(f"Enhanced pipeline parsed result: {pipeline_result}")
-                except json.JSONDecodeError:
+                    logger.info(f"Cleaned response: {cleaned_response}")
+                    parsed_result = json.loads(cleaned_response)
+                    logger.info(f"Enhanced pipeline parsed result: {parsed_result}")
+                    # Only set pipeline_result if it's a dictionary, not a list
+                    if isinstance(parsed_result, dict):
+                        pipeline_result = parsed_result
+                        logger.info(f"Set pipeline_result to dict: {pipeline_result}")
+                    else:
+                        logger.warning(f"Pipeline returned non-dict result: {type(parsed_result)}")
+                except json.JSONDecodeError as e:
                     logger.error(f"Failed to parse enhanced pipeline response: {response_text}")
+                    logger.error(f"JSON decode error: {e}")
                     pipeline_result = {"error": "Failed to parse enhanced pipeline response"}
 
         # Check session state to see what each agent produced
