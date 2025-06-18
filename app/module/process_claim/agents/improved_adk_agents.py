@@ -148,8 +148,8 @@ async def run_agent_pipeline(agent: LlmAgent, content: types.Content, user_id: s
     return {"error": f"No response from {agent.name}"}
 
 
-async def run_claim_processing_pipeline(ocr_texts: List[str], user_id: str = None) -> List[Dict]:
-    """Run the enhanced multi-agent orchestration pipeline for validation and decision making."""
+async def run_claim_processing_pipeline(genai_extracted_documents: List[Dict], user_id: str = None) -> List[Dict]:
+    """Run the enhanced multi-agent orchestration pipeline for validation and decision making using GenAI extracted data."""
     user_id = user_id or str(uuid.uuid4())
     session_id = str(uuid.uuid4())
 
@@ -159,22 +159,12 @@ async def run_claim_processing_pipeline(ocr_texts: List[str], user_id: str = Non
     final_results = []
 
     try:
-        for i, ocr_text in enumerate(ocr_texts):
+        for i, extracted_doc in enumerate(genai_extracted_documents):
             logger.info(f"=== Enhanced ADK Pipeline Processing Document {i + 1} ===")
-            logger.info(f"ADK OCR Text length: {len(ocr_text)} characters")
-            logger.info(f"ADK OCR Text (first 1000 chars): {ocr_text[:1000]}...")
+            logger.info(f"ADK Processing extracted document: {extracted_doc}")
 
-            # For now, we'll create a basic structure since we're focusing on validation/decision
-            # In a real implementation, this would come from the GenAI pipeline
-            basic_extracted_data = {
-                "type": "bill",
-                "hospital_name": "MAX Healthcare",  # This would come from GenAI
-                "total_amount": 339080.42,  # This would come from GenAI
-                "date_of_service": "2025-02-03",  # This would come from GenAI
-            }
-
-            # Create content with the extracted data for validation
-            validation_content = types.Content(parts=[types.Part.from_text(text=json.dumps(basic_extracted_data))])
+            # Use the actual GenAI extracted data instead of hardcoded data
+            validation_content = types.Content(parts=[types.Part.from_text(text=json.dumps(extracted_doc))])
 
             # Run the enhanced validation and decision pipeline
             pipeline_runner = Runner(agent=enhanced_processing_pipeline, app_name="healthpay_claims", session_service=session_service)
@@ -200,72 +190,38 @@ async def run_claim_processing_pipeline(ocr_texts: List[str], user_id: str = Non
             validation_result = {}
             claim_decision = {}
 
-            # Parse validation_result from session state
-            session_validation = session.state.get("validation_result", "")
-            if session_validation:
-                if isinstance(session_validation, str):
-                    try:
-                        cleaned_validation = clean_json_response(session_validation)
-                        validation_result = json.loads(cleaned_validation)
-                    except json.JSONDecodeError:
-                        logger.error(f"Failed to parse validation result: {session_validation}")
-                        # Provide intelligent fallback based on the extracted data
-                        validation_result = {
-                            "missing_documents": ["discharge_summary"],  # Always missing discharge summary for bills
-                            "discrepancies": [],
-                            "data_quality_score": 85,  # Good quality since we have real hospital and amount
-                            "recommendations": ["Submit discharge summary for complete claim processing"],
-                        }
-                else:
-                    validation_result = session_validation
+            # Parse session state to get individual agent results
+            if session.state:
+                for key, value in session.state.items():
+                    if key == "validation_result":
+                        try:
+                            if isinstance(value, str):
+                                validation_result = json.loads(clean_json_response(value))
+                            else:
+                                validation_result = value
+                        except json.JSONDecodeError:
+                            validation_result = {"error": "Failed to parse validation result"}
+                    elif key == "claim_decision":
+                        try:
+                            if isinstance(value, str):
+                                claim_decision = json.loads(clean_json_response(value))
+                            else:
+                                claim_decision = value
+                        except json.JSONDecodeError:
+                            claim_decision = {"error": "Failed to parse claim decision"}
 
-            # Parse claim_decision from session state
-            session_decision = session.state.get("claim_decision", "")
-            if session_decision:
-                if isinstance(session_decision, str):
-                    try:
-                        cleaned_decision = clean_json_response(session_decision)
-                        claim_decision = json.loads(cleaned_decision)
-                    except json.JSONDecodeError:
-                        logger.error(f"Failed to parse claim decision: {session_decision}")
-                        # Provide intelligent fallback based on the extracted data
-                        claim_decision = {
-                            "status": "conditional_approval",
-                            "reason": "Good data quality but missing discharge summary",
-                            "confidence_score": 75,
-                            "required_actions": ["Submit discharge summary"],
-                        }
-                else:
-                    claim_decision = session_decision
+            # Create result with extracted fields set to None (ADK doesn't extract, only validates/decides)
+            result = {
+                "extracted_fields": None,  # ADK doesn't extract, uses GenAI data
+                "validation_result": validation_result,
+                "claim_decision": claim_decision,
+            }
 
-            # Ensure we have default values for validation and decision
-            if not validation_result:
-                validation_result = {
-                    "missing_documents": [],
-                    "discrepancies": [],
-                    "data_quality_score": 0,
-                    "recommendations": ["No validation performed"],
-                }
-
-            if not claim_decision:
-                claim_decision = {
-                    "status": "rejected",
-                    "reason": "Decision processing failed",
-                    "confidence_score": 0,
-                    "required_actions": ["Resubmit"],
-                }
-
-            # Structure the result for the router (using GenAI extracted data)
-            final_results.append(
-                {
-                    "extracted_fields": None,  # No extraction from ADK - only validation/decision
-                    "validation_result": validation_result,  # This comes from ADK
-                    "claim_decision": claim_decision,  # This comes from ADK
-                }
-            )
+            final_results.append(result)
 
     except Exception as e:
-        logger.error(f"Error in enhanced multi-agent pipeline: {e}")
+        logger.error(f"Error running enhanced ADK claim processing pipeline: {e}")
         raise
 
+    logger.info(f"Enhanced ADK Pipeline completed with {len(final_results)} total results")
     return final_results

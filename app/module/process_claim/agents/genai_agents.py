@@ -134,14 +134,34 @@ async def extract_fields(ocr_text: str, doc_type: str) -> dict:
 
 
 async def validate_data(extracted_data: dict) -> dict:
-    """Validate the extracted data for completeness."""
-    prompt = f"""
-    Validate this extracted data for completeness and consistency. Return ONLY a JSON object with:
-    - missing_documents: List of missing required documents
-    - discrepancies: List of any data inconsistencies or issues
+    """Validate the extracted data for completeness based on document type."""
+    doc_type = extracted_data.get("type", "unknown")
 
+    prompt = f"""
+    Validate this extracted data for completeness and consistency based on document type.
+    
+    Document Type: {doc_type}
     Extracted Data:
     {json.dumps(extracted_data, indent=2)}
+    
+    Validation rules by document type:
+    
+    For BILL documents:
+    - hospital_name: Must be present and not "Unknown Hospital"
+    - total_amount: Must be greater than 0
+    - date_of_service: Must be a valid date
+    - diagnosis: NOT required for bills (bills don't contain diagnosis)
+    
+    For DISCHARGE SUMMARY documents:
+    - patient_name: Must be present and not "Unknown Patient"
+    - diagnosis: Must be present and not "Unknown Diagnosis"
+    - admission_date: Must be a valid date
+    - discharge_date: Must be a valid date after admission_date
+    - hospital_name: NOT required for discharge summaries
+    
+    Return ONLY a JSON object with:
+    - missing_documents: List of missing required documents
+    - discrepancies: List of any data inconsistencies or issues specific to the document type
 
     Return ONLY JSON like: {{"missing_documents": [], "discrepancies": []}}
     """
@@ -157,24 +177,8 @@ async def validate_data(extracted_data: dict) -> dict:
 
 async def make_claim_decision(validation_result: dict) -> dict:
     """Make a claim decision based on validation results."""
-    prompt = f"""
-    Based on the validation results, make a claim decision. Return ONLY a JSON object with:
-    - status: "approved" or "rejected"
-    - reason: Brief explanation of the decision
-
-    Validation Results:
-    {json.dumps(validation_result, indent=2)}
-
-    Return ONLY JSON like: {{"status": "approved", "reason": "All required documents present"}}
-    """
-
-    response = model.generate_content(prompt)
-    try:
-        cleaned_response = clean_json_response(response.text)
-        return json.loads(cleaned_response)
-    except json.JSONDecodeError:
-        logger.error(f"Failed to parse decision response: {response.text}")
-        return {"status": "rejected", "reason": "Failed to process claim decision"}
+    # Remove this function - ADK will handle claim decisions
+    return {"status": "pending", "reason": "Decision pending ADK processing"}
 
 
 async def run_claim_processing_pipeline(ocr_texts: list, user_id: str = None):
@@ -196,13 +200,12 @@ async def run_claim_processing_pipeline(ocr_texts: list, user_id: str = None):
             for j, doc in enumerate(extracted_documents):
                 logger.info(f"Processing extracted document {j + 1}/{len(extracted_documents)}: {doc.get('type', 'unknown')}")
 
-                # Validate the document data
+                # Validate the document data (document-type aware)
                 validation_result = await validate_data(doc)
                 logger.info(f"GenAI Validation result for {doc.get('type')}: {validation_result}")
 
-                # Make claim decision for this document
-                claim_decision = await make_claim_decision(validation_result)
-                logger.info(f"GenAI Claim decision for {doc.get('type')}: {claim_decision}")
+                # Don't make claim decisions here - ADK will handle that
+                claim_decision = {"status": "pending", "reason": "Decision pending ADK processing"}
 
                 # Combine results for this document
                 result = {"extracted_fields": doc, "validation_result": validation_result, "claim_decision": claim_decision}

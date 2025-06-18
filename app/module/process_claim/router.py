@@ -46,15 +46,22 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
         genai_results = await run_genai_pipeline(ocr_texts, user_id=str(uuid.uuid4()))
         logger.info(f"GenAI pipeline returned {len(genai_results)} results")
 
+        # Extract the actual documents from GenAI results for ADK processing
+        genai_extracted_documents = []
+        for result in genai_results:
+            extracted_fields = result.get("extracted_fields")
+            if extracted_fields and isinstance(extracted_fields, dict):
+                genai_extracted_documents.append(extracted_fields)
+
         # Step 2: Use ADK agents for enhanced validation and decision making (multi-agent orchestration)
         logger.info("Step 2: Using ADK agents for enhanced validation and decision making")
-        adk_results = await run_adk_pipeline(ocr_texts, user_id=str(uuid.uuid4()))
+        adk_results = await run_adk_pipeline(genai_extracted_documents, user_id=str(uuid.uuid4()))
         logger.info(f"ADK pipeline returned {len(adk_results)} results")
 
         # Combine results: Use GenAI for extraction, ADK for enhanced validation/decision
         agent_results = []
 
-        # Add GenAI results (good extraction)
+        # Add GenAI results (good extraction, basic validation, no decisions)
         for genai_result in genai_results:
             agent_results.append(genai_result)
 
@@ -166,20 +173,21 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
             logger.error(f"Validation error for document: {ve}")
             logger.error(f"Failed document data: {extracted}")
 
-        # Aggregate validation results
+        # Aggregate validation results - prioritize ADK over GenAI
         validation_result = result.get("validation_result", {})
         if isinstance(validation_result, dict):
             missing_docs = validation_result.get("missing_documents", [])
             discrepancies = validation_result.get("discrepancies", [])
 
+            # Only add GenAI validation if it's not overridden by ADK
             if isinstance(missing_docs, list):
                 all_missing_documents.extend(missing_docs)
             if isinstance(discrepancies, list):
                 all_discrepancies.extend(discrepancies)
 
-        # Collect claim decisions
+        # Collect claim decisions - only ADK decisions (not GenAI pending)
         claim_decision = result.get("claim_decision", {})
-        if isinstance(claim_decision, dict):
+        if isinstance(claim_decision, dict) and claim_decision.get("status") != "pending":
             claim_decisions.append(claim_decision)
 
     # Create aggregated validation result
@@ -210,44 +218,21 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
         discrepancies=filtered_discrepancies,
     )
 
-    # Determine final claim decision based on all results
-    if not claim_decisions:
-        claim_decision = ClaimDecision(status="rejected", reason="No claim decision returned by agent")
-    else:
-        # Prioritize approved decisions if we have good quality documents
-        has_good_quality_documents = any(
-            doc.hospital_name != "Unknown Hospital" and doc.total_amount > 0
-            for doc in documents
-            if hasattr(doc, "hospital_name") and hasattr(doc, "total_amount")
-        )
+    # Determine final claim decision based on ADK results only
+    adk_claim_decisions = []
+    for result in agent_results:
+        claim_decision = result.get("claim_decision", {})
+        if isinstance(claim_decision, dict):
+            # Only use ADK decisions (not GenAI pending decisions)
+            if claim_decision.get("status") != "pending":
+                adk_claim_decisions.append(claim_decision)
 
-        # If we have good quality documents, prioritize approval
-        if has_good_quality_documents:
-            # Check if any decision is rejected
-            any_rejected = any(decision.get("status") == "rejected" for decision in claim_decisions)
-            if any_rejected:
-                # Find the first rejection reason
-                rejection_reason = next(
-                    (decision.get("reason", "Unknown rejection reason") for decision in claim_decisions if decision.get("status") == "rejected"),
-                    "Multiple documents have validation issues",
-                )
-                claim_decision = ClaimDecision(status="rejected", reason=rejection_reason)
-            else:
-                # All decisions are approved
-                claim_decision = ClaimDecision(status="approved", reason="All required documents present and data is consistent")
-        else:
-            # No good quality documents, use the most conservative decision
-            any_rejected = any(decision.get("status") == "rejected" for decision in claim_decisions)
-            if any_rejected:
-                # Find the first rejection reason
-                rejection_reason = next(
-                    (decision.get("reason", "Unknown rejection reason") for decision in claim_decisions if decision.get("status") == "rejected"),
-                    "Multiple documents have validation issues",
-                )
-                claim_decision = ClaimDecision(status="rejected", reason=rejection_reason)
-            else:
-                # All decisions are approved but no good quality docs
-                claim_decision = ClaimDecision(status="rejected", reason="No high-quality documents found")
+    if not adk_claim_decisions:
+        claim_decision = ClaimDecision(status="rejected", reason="No ADK claim decision returned")
+    else:
+        # Use the first ADK decision (they should all be consistent)
+        adk_decision = adk_claim_decisions[0]
+        claim_decision = ClaimDecision(status=adk_decision.get("status", "rejected"), reason=adk_decision.get("reason", "Unknown reason"))
 
     return ProcessClaimResponse(
         documents=documents,
