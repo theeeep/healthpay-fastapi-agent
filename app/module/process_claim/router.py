@@ -70,6 +70,8 @@ async def process_claim_documents(files: List[UploadFile] = File(...)):
                 or validation.get("recommendations")
                 or decision.get("required_actions")
             ):
+                # ADK results should only contain validation and decision, not extracted fields
+                adk_result["extracted_fields"] = None  # Ensure no extraction from ADK
                 agent_results.append(adk_result)
 
         logger.info(f"Combined {len(agent_results)} total results from both pipelines")

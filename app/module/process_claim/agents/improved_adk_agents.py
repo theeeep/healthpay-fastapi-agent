@@ -30,7 +30,7 @@ def clean_json_response(response_text: str) -> str:
 # Step 3: Enhanced Validation Agent (Multi-Agent Orchestration)
 validation_agent = LlmAgent(
     name="EnhancedDataValidator",
-    model="gemini-2.0-flash-exp",
+    model="gemini-2.5-flash",
     description="Enhanced validation with multi-agent orchestration for medical claims",
     instruction="""
     You are an enhanced data validation agent for medical insurance claims. 
@@ -76,7 +76,7 @@ validation_agent = LlmAgent(
 # Step 4: Enhanced Decision Agent (Multi-Agent Orchestration)
 decision_agent = LlmAgent(
     name="EnhancedClaimDecisionMaker",
-    model="gemini-2.0-flash-exp",
+    model="gemini-2.5-flash",
     description="Enhanced claim decision making with multi-agent orchestration",
     instruction="""
     You are an enhanced claim decision agent for medical insurance claims.
@@ -161,7 +161,8 @@ async def run_claim_processing_pipeline(ocr_texts: List[str], user_id: str = Non
     try:
         for i, ocr_text in enumerate(ocr_texts):
             logger.info(f"=== Enhanced ADK Pipeline Processing Document {i + 1} ===")
-            logger.info(f"ADK OCR Text (first 500 chars): {ocr_text[:500]}...")
+            logger.info(f"ADK OCR Text length: {len(ocr_text)} characters")
+            logger.info(f"ADK OCR Text (first 1000 chars): {ocr_text[:1000]}...")
 
             # For now, we'll create a basic structure since we're focusing on validation/decision
             # In a real implementation, this would come from the GenAI pipeline
