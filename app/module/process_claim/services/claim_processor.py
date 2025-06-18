@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from app.core.logger import logger
-from app.module.process_claim.agents.document_extractor import run_claim_processing_pipeline as run_genai_pipeline
-from app.module.process_claim.agents.improved_adk_agents import run_claim_processing_pipeline as run_adk_pipeline
+from app.module.process_claim.agents.adk_validation_agent import run_claim_processing_pipeline as run_adk_pipeline
+from app.module.process_claim.agents.genai_extraction_agent import run_claim_processing_pipeline as run_genai_pipeline
 from app.module.process_claim.schemas.schemas import (
     BillDocument,
     ClaimDecision,
@@ -18,7 +18,7 @@ from app.module.process_claim.schemas.schemas import (
     ValidationResult,
 )
 from app.module.process_claim.services.file_validator import FileValidator
-from app.module.process_claim.services.ocr import process_ocr
+from app.module.process_claim.services.mistral_ocr_service import process_ocr
 
 
 @dataclass

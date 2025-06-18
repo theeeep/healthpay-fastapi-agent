@@ -32,12 +32,12 @@ A robust, AI-driven backend system for processing medical insurance claim docume
 #### 2. **Service Layer** (`app/module/process_claim/services/`)
 - **ClaimProcessor**: Core business logic orchestration
 - **FileValidator**: File validation and security checks
-- **OCR Service**: Text extraction using Mistral OCR
+- **MistralOCRService**: Text extraction using Mistral OCR
 
 #### 3. **Agent Layer** (`app/module/process_claim/agents/`)
-- **Document Extractor**: GenAI-based document classification and extraction
-- **ADK Agents**: Google ADK multi-agent orchestration for validation and decisions
-- **Prompt Manager**: Centralized prompt management
+- **GenAIExtractionAgent**: GenAI-based document classification and extraction
+- **ADKValidationAgent**: Google ADK multi-agent orchestration for validation and decisions
+- **PromptManager**: Centralized prompt management
 
 #### 4. **Schema Layer** (`app/module/process_claim/schemas/`)
 - **Pydantic Models**: Type-safe data validation
