@@ -12,6 +12,9 @@ COPY . .
 
 RUN uv sync --frozen --no-dev
 
+# Install your project package in editable mode to make it importable
+RUN uv pip install --no-deps --editable .
+
 ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
