@@ -165,16 +165,22 @@ class ClaimProcessor:
         return ocr_results
 
     async def _extract_documents(self, ocr_results: List[Dict[str, str]], user_id: str) -> List[Dict]:
-        """Extract documents using GenAI pipeline."""
-        logger.info("Starting document extraction with GenAI")
+        """Extract documents using GenAI pipeline in parallel."""
+        import asyncio
 
-        try:
-            genai_results = await run_genai_pipeline(ocr_results, user_id=user_id)
-            logger.info(f"GenAI extracted {len(genai_results)} document results")
-            return genai_results
-        except Exception as e:
-            logger.error(f"GenAI extraction failed: {e}")
-            raise ProcessingError(f"Document extraction failed: {e}") from e
+        from app.module.process_claim.llm.document_classifier import run_claim_processing_pipeline
+
+        async def process_one(ocr_result):
+            # Use the existing pipeline for a single document
+            return await run_claim_processing_pipeline([ocr_result], user_id=user_id)
+
+        tasks = [process_one(ocr_result) for ocr_result in ocr_results]
+        results_nested = await asyncio.gather(*tasks)
+        # Flatten the results (since each call returns a list)
+        genai_results = [item for sublist in results_nested for item in sublist]
+
+        logger.info(f"GenAI extracted {len(genai_results)} document results (parallel)")
+        return genai_results
 
     async def _validate_and_decide(self, genai_results: List[Dict], user_id: str) -> List[Dict]:
         """Validate documents and make decisions using ADK agents."""
