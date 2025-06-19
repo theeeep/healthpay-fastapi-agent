@@ -7,41 +7,36 @@ A robust, AI-driven backend system for processing medical insurance claim docume
 ## 🏗️ Architecture Overview
 
 ### System Design
+
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   FastAPI       │    │   Service Layer  │    │   Agent Layer   │
-│   Router        │───▶│   ClaimProcessor │───▶│   GenAI + ADK   │
-│   (HTTP)        │    │   FileValidator  │    │   Orchestration │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Validation    │    │   OCR Service    │    │   Prompt Manager│
-│   & Error       │    │   (Mistral)      │    │   (Centralized) │
-│   Handling      │    └──────────────────┘    └─────────────────┘
-└─────────────────┘
+┌───────────────┐    ┌────────────────────┐    ┌────────────────────┐    ┌────────────────────┐
+│   FastAPI     │    │   Service Layer    │    │   Agent Layer      │    │   Schema Layer     │
+│   Router      │───▶│   ClaimProcessor   │───▶│   GenAI Extraction │───▶│   Pydantic Models  │
+│   (HTTP)      │    │   FileValidator    │    │   ADK Validation   │    │   Response Models  │
+└───────────────┘    │   Mistral OCR      │    │   ADK Decision     │    └────────────────────┘
+                     └────────────────────┘    │   PromptManager    │
+                                               └────────────────────┘
 ```
 
 ### Key Components
 
 #### 1. **Router Layer** (`app/module/process_claim/router.py`)
-- **Responsibility**: HTTP concerns, request/response handling
-- **Features**: File upload validation, error handling, response formatting
-- **Design**: Clean, focused on HTTP concerns only
+- **Responsibility**: Handles HTTP requests, file uploads, and error responses
+- **Features**: Accepts multiple PDF files (multipart/form-data), validates input, and delegates to the service layer
 
 #### 2. **Service Layer** (`app/module/process_claim/services/`)
-- **ClaimProcessor**: Core business logic orchestration
-- **FileValidator**: File validation and security checks
-- **MistralOCRService**: Text extraction using Mistral OCR
+- **ClaimProcessor**: Orchestrates the entire claim processing workflow
+- **FileValidator**: Validates file type, size, and security
+- **MistralOCRService**: Extracts text from PDFs using Mistral OCR
 
 #### 3. **Agent Layer** (`app/module/process_claim/agents/`)
-- **GenAIExtractionAgent**: GenAI-based document classification and extraction
-- **ADKValidationAgent**: Google ADK multi-agent orchestration for validation and decisions
-- **PromptManager**: Centralized prompt management
+- **GenAI Extraction**: Classifies documents and extracts structured data using Gemini LLM
+- **ADK Validation/Decision**: Validates extracted data and makes claim decisions using Google ADK agents
+- **PromptManager**: Centralized management of all LLM prompts
 
 #### 4. **Schema Layer** (`app/module/process_claim/schemas/`)
-- **Pydantic Models**: Type-safe data validation
-- **Response Models**: Structured API responses
+- **Pydantic Models**: Type-safe data validation for all structured outputs
+- **Response Models**: Defines the API response format
 
 ## 🤖 AI Tool Integration
 
@@ -54,26 +49,7 @@ A robust, AI-driven backend system for processing medical insurance claim docume
 
 ### AI Tool Usage Examples
 
-#### Example 1: Architecture Design with Claude
-```
-Prompt: "Design a modular FastAPI backend for medical insurance claims processing. 
-Requirements:
-- Multi-agent orchestration using Google ADK
-- GenAI for document extraction
-- Clean separation of concerns
-- Async processing
-- Error handling
-
-Please provide:
-1. Directory structure
-2. Key classes and their responsibilities
-3. Data flow between components
-4. Error handling strategy"
-```
-
-**Response**: Claude provided the initial architecture design, suggesting the service layer pattern and modular agent structure.
-
-#### Example 2: Prompt Engineering with Gemini
+#### Example 1: Prompt Engineering with Gemini
 ```
 Prompt: "Create a prompt for extracting medical bill information from OCR text. 
 Requirements:
@@ -88,7 +64,7 @@ The prompt should be robust and handle edge cases."
 
 **Response**: Gemini helped create the initial extraction prompts, which were then refined through testing.
 
-#### Example 3: Code Refactoring with Cursor
+#### Example 2: Code Refactoring with Cursor
 ```
 Prompt: "Refactor this 327-line router into a clean, modular architecture:
 - Extract business logic into services
@@ -100,6 +76,24 @@ The router should only handle HTTP concerns."
 ```
 
 **Response**: Cursor helped break down the monolithic router into clean, focused components.
+
+#### Example: Document Classification Prompt
+
+Prompt:
+```
+Classify the following document based on its content and filename. Return only valid JSON.
+Content: [OCR text here]
+Filename: bill_2025.pdf
+```
+
+Response:
+```json
+{
+  "type": "bill",
+  "confidence": 0.97,
+  "reasoning": "The document contains a hospital name, bill amount, and service date."
+}
+```
 
 ## 🔄 Multi-Agent Workflow
 
@@ -203,7 +197,6 @@ pip install -r requirements.txt
 
 # Set environment variables
 export GOOGLE_API_KEY="your-api-key"
-export ADK_CREDENTIALS="your-adk-credentials"
 
 # Run the application
 uvicorn app.main:app --reload
@@ -218,32 +211,13 @@ curl -X POST "http://localhost:8000/process-claim" \
   -F "files=@discharge_summary.pdf"
 ```
 
-## 🧪 Testing
-
-### Test Files
-Sample documents are available in the `test_documents/` directory:
-- `fortis_bill.pdf` - Sample hospital bill
-- `max_healthcare_bill.pdf` - Another hospital bill format
-
-### Running Tests
-```bash
-# Run all tests
-pytest
-
-# Run specific test
-pytest tests/test_claim_processing.py
-
-# Run with coverage
-pytest --cov=app
-```
-
 ## 🔧 Configuration
 
 ### Environment Variables
 ```bash
 # Required
 GOOGLE_API_KEY=your-gemini-api-key
-ADK_CREDENTIALS=your-adk-credentials
+ 
 
 # Optional
 MAX_FILES_PER_REQUEST=5
@@ -300,27 +274,6 @@ class Config:
 - **Extensibility**: Simple to add new features
 - **Debugging**: Clear error traceability
 
-## 🎯 Key Features
-
-### ✅ Implemented
-- [x] Multi-agent orchestration with Google ADK
-- [x] GenAI document extraction and classification
-- [x] Multi-document support (bill + discharge summary)
-- [x] Robust error handling and validation
-- [x] Clean, modular architecture
-- [x] Comprehensive logging and monitoring
-- [x] Type-safe data models with Pydantic
-- [x] Async processing for better performance
-
-### 🔄 Future Enhancements
-- [ ] Redis caching for improved performance
-- [ ] PostgreSQL integration for data persistence
-- [ ] Vector store for document similarity
-- [ ] Docker containerization
-- [ ] Kubernetes deployment
-- [ ] Advanced analytics and reporting
-- [ ] Real-time processing with WebSockets
-
 ## 📝 License
 
 This project is part of the HealthPay Backend Developer Assignment.
@@ -328,3 +281,105 @@ This project is part of the HealthPay Backend Developer Assignment.
 ## 🤝 Contributing
 
 This is an assignment submission. For questions or clarifications, please refer to the assignment requirements.
+
+## Error Handling
+
+- If you upload a non-PDF file, an empty file, or a file with an invalid name, you will receive a clear error message.
+- If a document cannot be classified or is missing required fields, the claim will be rejected with detailed reasons in the response.
+- All errors are logged for traceability.
+
+## /process-claim Endpoint
+
+### Overview
+
+The `/process-claim` endpoint is the core of this backend system. It processes medical insurance claim documents using a modular, agentic AI pipeline. The endpoint supports multiple PDF file uploads, allowing for flexible integration with various client applications.
+
+### How It Works
+
+1. **Input:**
+   - Accepts multiple PDF files (multipart/form-data) in a single request.
+
+2. **File Validation:**
+   - Each file is checked for type (PDF), size, and filename safety.
+   - Invalid files are rejected early with clear error messages.
+
+3. **OCR Extraction (Mistral OCR):**
+   - Uploaded files are base64-encoded and sent to Mistral OCR for text extraction.
+   - Extracted text is preserved with document structure for downstream processing.
+
+4. **LLM Classification & Extraction (Gemini):**
+   - Each document's text is classified (bill, discharge summary, or unknown) using Gemini LLM.
+   - Structured fields are extracted using prompt engineering.
+
+5. **AI Agent Orchestration (Google ADK):**
+   - The structured data is passed to a multi-agent pipeline:
+     - **Validation Agent:** Checks for missing data, inconsistencies, and business rule violations.
+     - **Decision Agent:** Approves or rejects the claim, providing reasons and required actions.
+
+6. **Response:**
+   - Returns a structured JSON response containing:
+     - All extracted documents
+     - Validation results (missing documents, discrepancies)
+     - The final claim decision (status, reason)
+
+### Example Request
+
+#### File Upload
+```bash
+curl -X POST "http://localhost:8000/process-claim" \
+  -H "Content-Type: multipart/form-data" \
+  -F "files=@bill.pdf" \
+  -F "files=@discharge_summary.pdf"
+```
+
+### Example Response
+
+```json
+{
+  "documents": [
+    {
+      "type": "bill",
+      "hospital_name": "ABC Hospital",
+      "total_amount": 12500,
+      "date_of_service": "2024-04-10"
+    },
+    {
+      "type": "discharge_summary",
+      "patient_name": "John Doe",
+      "diagnosis": "Fracture",
+      "admission_date": "2024-04-01",
+      "discharge_date": "2024-04-10"
+    }
+  ],
+  "validation": {
+    "missing_documents": [],
+    "discrepancies": []
+  },
+  "claim_decision": {
+    "status": "approved",
+    "reason": "All required documents present and data is consistent"
+  }
+}
+```
+
+### Agentic Pipeline Diagram
+
+```mermaid
+flowchart TD
+    A[User/API Client] --> B[FastAPI Router]
+    B --> C[ClaimProcessor Service]
+    C --> D1[Mistral OCR Service]
+    C --> D2[GenAI Extraction (Gemini)]
+    C --> D3[ADK Agent Orchestration]
+    D1 --> D2
+    D2 --> D3
+    D3 --> E[Response: Documents, Validation, Decision]
+```
+
+### Key Points
+
+- **Supports multiple PDF file uploads**
+- **Modular, agentic pipeline**: Each step is handled by a specialized AI agent or service
+- **Robust error handling**: Invalid files or unsupported documents are rejected with clear messages
+- **Explainable decisions**: The response includes not just the decision, but the reasoning and validation details
+ 
