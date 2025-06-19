@@ -53,7 +53,7 @@ async def extract_fields(ocr_text: str, doc_type: str) -> dict:
         return {"type": doc_type}
 
 
-async def run_claim_processing_pipeline(ocr_results: list, user_id: str = None):
+async def run_genai_claim_pipeline(ocr_results: list, user_id: str = None):
     """Run the complete claim processing pipeline."""
     user_id = user_id or str(uuid.uuid4())
     final_results = []

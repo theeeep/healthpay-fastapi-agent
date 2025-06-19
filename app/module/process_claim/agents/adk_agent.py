@@ -40,7 +40,7 @@ decision_agent = LlmAgent(
 enhanced_processing_pipeline = SequentialAgent(name="EnhancedProcessingPipeline", sub_agents=[validation_agent, decision_agent])
 
 
-async def run_claim_processing_pipeline(genai_extracted_documents: List[Dict], user_id: str = None) -> List[Dict]:
+async def run_adk_claim_pipeline(genai_extracted_documents: List[Dict], user_id: str = None) -> List[Dict]:
     """Run the enhanced multi-agent orchestration pipeline for validation and decision making using GenAI extracted data."""
     user_id = user_id or str(uuid.uuid4())
     session_id = str(uuid.uuid4())

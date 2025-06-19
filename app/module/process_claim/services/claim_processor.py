@@ -3,14 +3,14 @@ Claim Processing Service - Core business logic for processing medical insurance 
 This service orchestrates the entire claim processing workflow in a clean, modular way.
 """
 
+import asyncio
 import uuid
-from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Dict, List, Optional
 
 from app.core.logger import logger
-from app.module.process_claim.agents.adk_agent import run_claim_processing_pipeline as run_adk_pipeline
-from app.module.process_claim.llm.document_classifier import run_claim_processing_pipeline as run_genai_pipeline
+from app.module.process_claim.agents.adk_agent import run_adk_claim_pipeline
+from app.module.process_claim.llm.document_classifier import run_genai_claim_pipeline
 from app.module.process_claim.schemas.schemas import (
     BillDocument,
     ClaimDecision,
@@ -20,16 +20,6 @@ from app.module.process_claim.schemas.schemas import (
 )
 from app.module.process_claim.services.file_validator import FileValidator
 from app.module.process_claim.services.mistral_ocr_service import process_ocr
-
-
-@dataclass
-class ProcessingResult:
-    """Result of claim processing with all intermediate data."""
-
-    documents: List[Dict]
-    validation: ValidationResult
-    claim_decision: ClaimDecision
-    processing_metadata: Dict
 
 
 def validate_date(date_str: Optional[str], field_name: str) -> tuple[bool, Optional[str]]:
@@ -151,7 +141,6 @@ class ClaimProcessor:
 
     async def _process_files(self, files: List[bytes], filenames: List[str]) -> List[Dict[str, str]]:
         """Validate files and extract OCR text in parallel."""
-        import asyncio
 
         async def validate_and_ocr(file_content, filename):
             await self.file_validator.validate_file(file_content, filename)
@@ -166,13 +155,10 @@ class ClaimProcessor:
 
     async def _extract_documents(self, ocr_results: List[Dict[str, str]], user_id: str) -> List[Dict]:
         """Extract documents using GenAI pipeline in parallel."""
-        import asyncio
-
-        from app.module.process_claim.llm.document_classifier import run_claim_processing_pipeline
 
         async def process_one(ocr_result):
             # Use the existing pipeline for a single document
-            return await run_claim_processing_pipeline([ocr_result], user_id=user_id)
+            return await run_genai_claim_pipeline([ocr_result], user_id=user_id)
 
         tasks = [process_one(ocr_result) for ocr_result in ocr_results]
         results_nested = await asyncio.gather(*tasks)
@@ -217,7 +203,7 @@ class ClaimProcessor:
                 ]
 
             # If dates are valid, proceed with ADK pipeline
-            adk_results = await run_adk_pipeline(extracted_documents, user_id=user_id)
+            adk_results = await run_adk_claim_pipeline(extracted_documents, user_id=user_id)
             logger.info(f"ADK processed {len(adk_results)} results")
             return adk_results
 
