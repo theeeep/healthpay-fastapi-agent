@@ -9,16 +9,23 @@ A minimal, modular backend for processing medical insurance claim documents usin
 - **Modular, async FastAPI architecture**
 - **Structured JSON output:** Includes validation and claim decision
 
-## 📚 Documentation
-
-Full technical documentation and API reference: **See Scalar Docs** ↗
-
 ## 🛠️ Getting Started
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - Google API Key (for Gemini/ADK)
+- Mistral API Key (for Mistral OCR)
 - (Optional) Docker
 
 ### Installation
+
+```bash
+uv sync --frozen --no-dev
+```
+
+### Running the Server
+
+```bash
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
