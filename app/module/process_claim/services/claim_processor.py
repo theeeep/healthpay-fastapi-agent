@@ -150,18 +150,18 @@ class ClaimProcessor:
             raise ProcessingError(f"Failed to process claim documents: {e}") from e
 
     async def _process_files(self, files: List[bytes], filenames: List[str]) -> List[Dict[str, str]]:
-        """Validate files and extract OCR text."""
-        ocr_results = []
+        """Validate files and extract OCR text in parallel."""
+        import asyncio
 
-        for file_content, filename in zip(files, filenames):
-            # Validate file
+        async def validate_and_ocr(file_content, filename):
             await self.file_validator.validate_file(file_content, filename)
-
-            # Extract OCR text
             ocr_text = await process_ocr(file_content, filename)
-            ocr_results.append({"text": ocr_text, "filename": filename})
+            return {"text": ocr_text, "filename": filename}
 
-        logger.info(f"Processed {len(ocr_results)} files with OCR")
+        tasks = [validate_and_ocr(fc, fn) for fc, fn in zip(files, filenames)]
+        ocr_results = await asyncio.gather(*tasks)
+
+        logger.info(f"Processed {len(ocr_results)} files with OCR (parallel)")
         return ocr_results
 
     async def _extract_documents(self, ocr_results: List[Dict[str, str]], user_id: str) -> List[Dict]:
