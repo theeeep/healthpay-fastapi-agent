@@ -1,0 +1,28 @@
+services:
+  healthpay-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: healthpay_api
+    ports:
+      - "8000:8000"
+    image: healthpay_be
+    restart: unless-stopped
+    environment:
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      # Add other environment variables as needed
+    # Uncomment below for local development hot-reload (Docker Compose v2+ only)
+    develop:
+      watch:  
+        - action: sync
+          path: .
+          target: /app
+          ignore:
+            - .venv/
+        - action: rebuild
+          path: ./pyproject.toml
+  
+ 
+
+ 
